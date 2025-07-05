@@ -7,14 +7,17 @@ from multiprocessing import Pool, cpu_count
 from tqdm import tqdm
 import time
 import datetime
-import glob
+from dotenv import load_dotenv
 
 # --- 1. 설정 ---
 # Alchemy API 설정
-ALCHEMY_CONFIG = {
-    "url": "https://eth-mainnet.g.alchemy.com/v2/(API key를 넣어주세요)",
-    "timeout": 20
-}
+load_dotenv()
+ALCHEMY_API_URL = os.getenv("ALCHEMY_API_URL")
+
+if not ALCHEMY_API_URL:
+    print("[오류] .env파일에 ALCHEMY_API_URL이 설정되지 않았습니다!")
+    print("종료합니다")
+    exit()
 
 # S3 버킷 설정
 S3_CONFIG = {
@@ -80,8 +83,7 @@ def transform_transaction(tx, block_timestamp):
         if field in transformed_tx:
             if transformed_tx.get(field):
                 transformed_tx[field] = str(int(transformed_tx[field], 16))
-            else:
-                None
+
     transformed_tx['timestamp'] = convert_hex_timestamp_to_kst_str(block_timestamp)
     return transformed_tx
 
@@ -97,7 +99,7 @@ def fetch_and_save_single_block(block_num):
     payload = {"jsonrpc": "2.0", "id": 1, "method": "eth_getBlockByNumber", "params": [hex_block_num, True]}
     
     try:
-        response = requests.post(ALCHEMY_CONFIG["url"], json=payload, timeout=ALCHEMY_CONFIG["timeout"])
+        response = requests.post(ALCHEMY_API_URL, json=payload, timeout=20)
         response.raise_for_status()
         result = response.json().get('result')
 

@@ -173,4 +173,25 @@ poetry.toml
 # LSP config files
 pyrightconfig.json
 
+# ==================================
+# Python 가상환경 및 캐시 파일 무시
+# ==================================
+venv/
+__pycache__/
+*.pyc
+
+
+# ==================================
+# 민감한 정보 및 개인 설정 파일 무시
+# ==================================
+.env
+
+
+# ==================================
+# 로컬 데이터 및 결과물 무시
+# ==================================
+/raw_block_data/
+/compressed_data/
+*.jsonl.gz
+eth_processing_state.json
 # End of https://www.toptal.com/developers/gitignore/api/python

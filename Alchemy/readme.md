@@ -1,6 +1,8 @@
 # eth_s3.py 사용법
 
-1. 최상단 설정에서 API 주소를 알맞게 변경해주세요!
+1. .env파일을 샏성해서
+ALCHEMY_API_URL="https://eth-mainnet.g.alchemy.com/v2/API_key"
+형식으로 채워주세요!
 
 2. 최상단 설정에서 할당된 블록 범위를
     "MY_START_BLOCK": 22758002,                  # 작업 시작 블록
