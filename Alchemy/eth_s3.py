@@ -116,7 +116,7 @@ def fetch_and_save_single_block(block_num):
     except requests.RequestException:
         return None
 
-def fetcher(start_block, num_blocks_to_fetch):
+def fetch_multiple_blocks(start_block, num_blocks_to_fetch):
     """지정된 수만큼 블록을 병렬로 가져와 로컬에 저장하고, 다음 시작 지점을 반환합니다."""
     my_end_block = PROCESSING_CONFIG["MY_END_BLOCK"]
     print(f"\n--- 데이터 추출 시작 (총 {num_blocks_to_fetch}개) ---")
@@ -229,7 +229,7 @@ def main():
                 print("모든 작업 완료. 프로그램을 종료합니다.")
                 break
             
-            next_start_point = fetcher(next_block_to_fetch, PROCESSING_CONFIG["fetch_batch_size"])
+            next_start_point = fetch_multiple_blocks(next_block_to_fetch, PROCESSING_CONFIG["fetch_batch_size"])
             save_state(next_start_point)
             run_packer_and_uploader()
             
