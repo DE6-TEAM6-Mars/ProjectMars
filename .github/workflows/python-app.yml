@@ -49,7 +49,7 @@ jobs:
         aws-region: ap-northeast-2 
     - name: Upload dags folder to S3
       run: |
-        aws s3 sync ./dags s3://your-bucket/dags \
+        aws s3 sync ./dags s3://de6-team6-bucket/dags \
         --exclude="__pycache__/*" \
         --exclude="*/__pycache__/*" \
         --exclude="*.pyc" \
