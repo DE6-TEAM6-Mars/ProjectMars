@@ -6,9 +6,10 @@ name: Python application
 on:
   push:
     branches: [ "main" ]
+    paths: ['dags/**']
   pull_request:
     branches: [ "main" ]
-  package: ['dags/**']
+    paths: ['dags/**']
     
 
 permissions:
