@@ -1,0 +1,57 @@
+# This workflow will install Python dependencies, run tests and lint with a single version of Python
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
+
+name: Python application
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+    paths: ['dags/**']
+  pull_request:
+    branches: [ "main" ]
+    paths: ['dags/**']
+    
+
+permissions:
+  contents: read
+
+jobs:
+  steps:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.10"
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 pytest
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+    - name: Lint dags folder
+      run: |
+        flake8 dags --count --select=E9,F63,F7,F82 --show-source --statistics
+    - name: Run Python syntax check on dags
+      run: |
+        find dags -name '*.py' -exec python -m py_compile {} \;
+    # - name: Test with pytest
+    #   run: |
+    #     pytest
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ap-northeast-2 
+    - name: Upload dags folder to S3
+      run: |
+        aws s3 sync ./dags s3://de6-team6-bucket/dags \
+        --exclude="__pycache__/*" \
+        --exclude="*/__pycache__/*" \
+        --exclude="*.pyc" \
+        --exclude="*.pyo"
+

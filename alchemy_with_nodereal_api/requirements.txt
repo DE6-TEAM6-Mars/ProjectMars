@@ -1,0 +1,6 @@
+boto3==1.39.2
+pandas==2.3.0
+pyarrow==20.0.0
+python-dotenv==1.1.1
+requests==2.32.4
+tqdm==4.67.1
