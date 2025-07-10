@@ -4,7 +4,7 @@ import json
 
 from airflow.decorators import dag, task
 from airflow.providers.amazon.aws.hooks.s3 import S3Hook
-from airflow.providers.postgres.operators.postgres import PostgresOperator
+from airflow.providers.amazon.aws.hooks.redshift_sql import RedshiftSQLHook
 
 @dag(
     dag_id="daily_eth_price_etl",
@@ -50,7 +50,6 @@ def daily_eth_price_etl():
         """추출된 데이터를 조합하여 최종 레코드를 만듭니다."""
         price_krw = price_usd * fx_rate
         date_str = pendulum.parse(logical_date).to_date_string()
-        
         final_record = {
             "price_date": date_str,
             "price_usd": round(price_usd, 4),
@@ -64,7 +63,6 @@ def daily_eth_price_etl():
         """처리된 레코드를 S3의 '마스터 파일'에 한 행 추가합니다."""
         s3_hook = S3Hook(aws_conn_id='S3Conn')
         master_file_key = "reference_data/eth_prices.jsonl"
-        
         try:
             existing_content = s3_hook.read_key(key=master_file_key, bucket_name=s3_bucket)
         except Exception:
@@ -72,7 +70,6 @@ def daily_eth_price_etl():
 
         new_line = json.dumps(record, ensure_ascii=False)
         updated_content = (existing_content.strip() + '\n' + new_line) if existing_content else new_line
-        
         s3_hook.load_string(
             string_data=updated_content,
             key=master_file_key,
@@ -81,31 +78,33 @@ def daily_eth_price_etl():
         )
         print(f"마스터 파일에 한 행을 추가했습니다: s3://{s3_bucket}/{master_file_key}")
 
-    load_to_redshift = PostgresOperator(
-        task_id="load_data_to_redshift",
-        postgres_conn_id="RedshiftConn",
-        sql="""
+    @task
+    def load_to_redshift(record: dict):
+        """처리된 레코드를 Redshift 테이블에 INSERT합니다."""
+        hook = RedshiftSQLHook(redshift_conn_id="RedshiftConn")
+        sql = """
             INSERT INTO analytics.dim_daily_prices (price_date, price_usd, price_krw)
-            VALUES (
-                '{{ ti.xcom_pull(task_ids='transform_price_data')['price_date'] }}',
-                {{ ti.xcom_pull(task_ids='transform_price_data')['price_usd'] }},
-                {{ ti.xcom_pull(task_ids='transform_price_data')['price_krw'] }}
-            );
-        """,
-    )
+            VALUES (%s, %s, %s);
+        """
+        params = (
+            record['price_date'],
+            record['price_usd'],
+            record['price_krw']
+        )
+        hook.run(sql, parameters=params)
+        print("성공적으로 Redshift에 데이터를 적재했습니다.")
 
     logical_date_str = "{{ data_interval_end.to_date_string() }}"
     
     # 1. Extract (두 태스크가 병렬로 실행됨)
     usd_price = get_eth_usd_price(logical_date_str)
     krw_rate = get_usd_krw_fx_rate(logical_date_str)
-    
+
     # 2. Transform (usd_price와 krw_rate의 결과를 입력으로 받음)
     final_data_record = transform_price_data(usd_price, krw_rate, logical_date_str)
 
     # 3. Load (transform의 결과를 입력으로 받아 두 태스크가 병렬로 실행됨)
     s3_bucket_name = "de6-team6-bucket"
-    final_data_record >> append_to_master_file(s3_bucket_name)
-    final_data_record >> load_to_redshift
-
+    append_to_master_file(final_data_record, s3_bucket_name)
+    load_to_redshift(final_data_record)
 daily_eth_price_etl()
