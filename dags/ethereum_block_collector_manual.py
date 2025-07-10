@@ -10,7 +10,7 @@ import logging
     dag_id='ethereum_block_collector_manual',
     start_date=datetime(2025, 6, 30, 15, 5, 0),
     schedule_interval='@hourly',
-    catchup=True,
+    catchup=False,
     max_active_runs=1,
     default_args={
         'owner': 'jeongin',
