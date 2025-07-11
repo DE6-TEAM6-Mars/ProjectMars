@@ -1,15 +1,13 @@
 import pendulum
 import requests
-import json
 import logging
 
 from airflow.decorators import dag, task
-from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 from airflow.providers.amazon.aws.hooks.redshift_sql import RedshiftSQLHook
 
 @dag(
     dag_id="daily_eth_price_etl",
-    start_date=pendulum.datetime(2025, 7, 10, tz="Asia/Seoul"),
+    start_date=pendulum.datetime(2025, 7, 9, tz="Asia/Seoul"),
     schedule_interval="5 9 * * *",
     description="[TaskFlow] 매일 ETH 가격과 환율을 가져와 S3 마스터 파일과 Redshift 테이블에 추가하는 DAG",
     catchup=True,
@@ -71,49 +69,39 @@ def daily_eth_price_etl():
 
     # --- 3. LOAD Tasks ---
     @task
-    def append_to_master_file(record: dict, s3_bucket: str):
-        """처리된 레코드를 S3의 '마스터 파일'에 한 행 추가합니다."""
-        logging.info(f"Load 태스크 시작: S3 마스터 파일에 레코드를 추가합니다. Bucket: {s3_bucket}")
-        s3_hook = S3Hook(aws_conn_id='S3Conn')
-        master_file_key = "reference_data/eth_prices.jsonl"
-        
-        try:
-            existing_content = s3_hook.read_key(key=master_file_key, bucket_name=s3_bucket)
-        except Exception:
-            logging.warning("마스터 파일이 존재하지 않아 새로 생성합니다.")
-            existing_content = ""
-
-        new_line = json.dumps(record, ensure_ascii=False)
-        updated_content = (existing_content.strip() + '\n' + new_line) if existing_content else new_line
-        
-        s3_hook.load_string(
-            string_data=updated_content,
-            key=master_file_key,
-            bucket_name=s3_bucket,
-            replace=True,
-        )
-        logging.info(f"S3 Load 성공: 마스터 파일에 한 행을 추가했습니다. s3://{s3_bucket}/{master_file_key}")
-
-    @task
     def load_to_redshift(record: dict):
-        """처리된 레코드를 Redshift 테이블에 INSERT합니다."""
+        """
+        처리된 레코드를 Redshift 테이블에 적재합니다.
+        - 만약 동일한 price_date의 데이터가 이미 있다면, 기존 데이터를 삭제하고 새로운 데이터로 교체합니다.
+        """
         logging.info(f"Load 태스크 시작: Redshift 테이블에 레코드를 적재합니다. Record: {record}")
         hook = RedshiftSQLHook(redshift_conn_id="RedshiftConn")
+        
         sql = """
+            BEGIN;
+            
+            DELETE FROM analytics.dim_daily_prices 
+            WHERE price_date = %s;
+            
             INSERT INTO analytics.dim_daily_prices (price_date, price_usd, price_krw)
             VALUES (%s, %s, %s);
+            
+            COMMIT;
         """
+        
         params = (
-            record['price_date'],
+            record['price_date'], # DELETE 문의 WHERE 절에 사용될 값
+            record['price_date'], # INSERT 문의 VALUES에 사용될 값
             record['price_usd'],
             record['price_krw']
         )
+        
         hook.run(sql, parameters=params)
-        logging.info("Redshift Load 성공: 성공적으로 데이터를 적재했습니다.")
+        logging.info("Redshift Load 성공: 성공적으로 데이터를 적재(Upsert)했습니다.")
 
 
     # --- DAG 실행 순서 정의 ---
-    logical_date_str = "{{ data_interval_end.to_date_string() }}"
+    logical_date_str = "{{ ds }}"
     
     # 1. Extract (두 태스크가 병렬로 실행됨)
     usd_price = get_eth_usd_price(logical_date=logical_date_str)
@@ -127,8 +115,6 @@ def daily_eth_price_etl():
     )
 
     # 3. Load (transform의 결과를 입력으로 받아 두 태스크가 병렬로 실행됨)
-    s3_bucket_name = "de6-team6-bucket"
-    append_to_master_file(record=final_data_record, s3_bucket=s3_bucket_name)
     load_to_redshift(record=final_data_record)
 
 daily_eth_price_etl()
