@@ -77,27 +77,32 @@ def daily_eth_price_etl():
         logging.info(f"Load 태스크 시작: Redshift 테이블에 레코드를 적재합니다. Record: {record}")
         hook = RedshiftSQLHook(redshift_conn_id="RedshiftConn")
         
-        sql = """
-            BEGIN;
-            
-            DELETE FROM analytics.dim_daily_prices 
-            WHERE price_date = %s;
-            
-            INSERT INTO analytics.dim_daily_prices (price_date, price_usd, price_krw)
-            VALUES (%s, %s, %s);
-            
-            COMMIT;
-        """
+        conn = hook.get_conn()
         
-        params = (
-            record['price_date'], # DELETE 문의 WHERE 절에 사용될 값
-            record['price_date'], # INSERT 문의 VALUES에 사용될 값
-            record['price_usd'],
-            record['price_krw']
-        )
-        
-        hook.run(sql, parameters=params)
-        logging.info("Redshift Load 성공: 성공적으로 데이터를 적재(Upsert)했습니다.")
+        try:
+            with conn.cursor() as cursor:
+                # 1. 기존 데이터 삭제 (단일 명령)
+                delete_sql = "DELETE FROM analytics.dim_daily_prices WHERE price_date = %s;"
+                cursor.execute(delete_sql, (record['price_date'],))
+                logging.info(f"기존 데이터 삭제 시도: price_date = {record['price_date']}")
+
+                # 2. 새로운 데이터 삽입 (단일 명령)
+                insert_sql = "INSERT INTO analytics.dim_daily_prices (price_date, price_usd, price_krw) VALUES (%s, %s, %s);"
+                cursor.execute(insert_sql, (record['price_date'], record['price_usd'], record['price_krw']))
+                logging.info(f"새로운 데이터 삽입: {record}")
+
+            # 3. 모든 작업이 성공했을 때 트랜잭션을 영구 저장(COMMIT)합니다.
+            conn.commit()
+            logging.info("Redshift Load 성공: 트랜잭션이 성공적으로 COMMIT되었습니다.")
+
+        except Exception as e:
+            # 4. 작업 중 하나라도 실패하면 모든 변경 사항을 취소(ROLLBACK)합니다.
+            logging.error(f"트랜잭션 실패: {e}")
+            conn.rollback()
+            raise # 에러를 다시 발생시켜 Airflow 태스크를 실패 상태로 만듭니다.
+
+        finally:
+            conn.close()
 
 
     # --- DAG 실행 순서 정의 ---
