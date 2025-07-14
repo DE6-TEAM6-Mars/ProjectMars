@@ -1,55 +1,23 @@
+import os
 import requests
 import pandas as pd
 import json
 import boto3
 import io
+import time
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any, List
+from itertools import cycle
 from airflow.models import Variable
 import pyarrow as pa
 import pyarrow.parquet as pq
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-
-# 환경 변수 불러오기
-NODEREAL_RPC = Variable.get("NODEREAL_RPC")
 ETHERSCAN_API_KEY = Variable.get("ETHERSCAN_API_KEY")
+NODIT_API_KEYS = json.loads(Variable.get("NODIT_API_KEYS", default_var="[]"))
 KST = timezone(timedelta(hours=9))
 
 
-# RPC 호출
-def call_rpc(method: str, params: List[Any]) -> Optional[Dict[str, Any]]:
-    payload = {
-        "jsonrpc": "2.0",
-        "method": method,
-        "params": params,
-        "id": 1
-    }
-    try:
-        res = requests.post(NODEREAL_RPC, json=payload, timeout=10)
-        return res.json().get("result")
-    except Exception as e:
-        print(f"[!] RPC call failed for method={method}, params={params}, error={e}")
-        return None
-
-
-# 타임스탬프 → KST 문자열
-def convert_hex_timestamp_to_kst_str(hex_timestamp: str) -> Optional[str]:
-    if not hex_timestamp:
-        return None
-    try:
-        utc_dt = datetime.fromtimestamp(int(hex_timestamp, 16), tz=timezone.utc)
-        return utc_dt.astimezone(KST).strftime('%Y-%m-%d %H:%M:%S')
-    except (ValueError, TypeError):
-        return None
-
-
-# 블록 조회
-def get_block_by_number(block_number: int) -> Optional[Dict[str, Any]]:
-    hex_num = hex(block_number)
-    return call_rpc("eth_getBlockByNumber", [hex_num, True])
-
-
-# 타임스탬프 → 블록 번호 (Etherscan)
 def find_block_by_timestamp(target_ts: int, closest: str = "before") -> Optional[int]:
     url = "https://api.etherscan.io/api"
     params = {
@@ -62,36 +30,16 @@ def find_block_by_timestamp(target_ts: int, closest: str = "before") -> Optional
 
     try:
         res = requests.get(url, params=params, timeout=10).json()
-        print(f"[DEBUG] Etherscan request for ts={target_ts}, closest={closest} → res={res}")
-
+        print(f"[DEBUG] Etherscan ts={target_ts}, closest={closest} → res={res}")
         if res.get("status") == "1":
             return int(res["result"])
         else:
-            print(f"[!] Etherscan Error: {res.get('message')}, full response: {res}")
+            print(f"[!] Etherscan Error: {res.get('message')}")
     except Exception as e:
         print(f"[!] Etherscan request failed: {e}")
-
     return None
 
 
-# 트랜잭션 필드 정제 + 타임스탬프 포함
-def transform_transaction(tx: Dict[str, Any], block_ts_hex: str) -> Dict[str, Any]:
-    numeric_fields = [
-        'blockNumber', 'gas', 'gasPrice', 'maxFeePerGas',
-        'maxPriorityFeePerGas', 'nonce', 'transactionIndex', 'value'
-    ]
-    transformed_tx = tx.copy()
-    for field in numeric_fields:
-        if field in transformed_tx and transformed_tx[field]:
-            try:
-                transformed_tx[field] = str(int(transformed_tx[field], 16))
-            except Exception:
-                pass
-    transformed_tx["timestamp"] = convert_hex_timestamp_to_kst_str(block_ts_hex)
-    return transformed_tx
-
-
-# 시간 범위 내의 정제된 트랜잭션 수집
 def collect_raw_transactions(from_ts: datetime, to_ts: datetime) -> List[Dict[str, Any]]:
     start_unix = int(from_ts.timestamp())
     end_unix = int(to_ts.timestamp())
@@ -100,31 +48,98 @@ def collect_raw_transactions(from_ts: datetime, to_ts: datetime) -> List[Dict[st
     end_block = find_block_by_timestamp(end_unix, closest="before")
 
     if start_block is None or end_block is None:
-        print(f"[!] Block not found. start_block={start_block}, end_block={end_block}")
-        return []
+        raise ValueError(f"❌ Block not found. start_block={start_block}, end_block={end_block}")
+
+    if not NODIT_API_KEYS:
+        raise ValueError("❌ Airflow Variable 'NODIT_API_KEYS' is not configured or empty")
 
     print(f"[INFO] Collecting from block {start_block} to {end_block} ({end_block - start_block + 1} blocks)")
 
+    api_cycle = cycle(NODIT_API_KEYS)
     raw_txs: List[Dict[str, Any]] = []
-    for block_number in range(start_block, end_block + 1):
-        block = get_block_by_number(block_number)
-        if not block:
-            print(f"[!] Block {block_number} 조회 실패")
-            continue
-        block_ts_hex = block["timestamp"]
-        block_ts_int = int(block_ts_hex, 16)
-        if start_unix <= block_ts_int < end_unix:
-            for tx in block.get("transactions", []):
-                tx["blockNumber"] = block["number"]
-                transformed = transform_transaction(tx, block_ts_hex)
-                raw_txs.append(transformed)
 
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = [
+            executor.submit(fetch_block, blk, api_cycle, start_unix, end_unix)
+            for blk in range(start_block, end_block + 1)
+        ]
+        for future in as_completed(futures):
+            raw_txs.extend(future.result())
+
+    print(f"[INFO] Total {len(raw_txs)} transactions collected.")
     return raw_txs
 
 
-# S3 업로드
+def fetch_block(block_number: int, api_cycle, start_unix: int, end_unix: int) -> List[Dict[str, Any]]:
+    key = next(api_cycle)
+    url = "https://web3.nodit.io/v1/ethereum/mainnet/blockchain/getTransactionsInBlock"
+    headers = {
+        "X-API-KEY": key,
+        "Content-Type": "application/json"
+    }
+
+    print(f"[FETCH] Start block={block_number}, API Key=****{key[-4:]}")
+    txs_collected = []
+    cursor = None
+    prev_cursors = set()
+
+    while True:
+        payload = {
+            "block": block_number,
+            "withLogs": True,           # ✅ 반드시 추가
+            "withDecode": True,         # ✅ 반드시 추가
+            "rpp": 1000
+        }
+        if cursor:
+            payload["cursor"] = cursor
+
+        try:
+            resp = requests.post(url, headers=headers, json=payload, timeout=10)
+
+            if resp.status_code == 429:
+                print(f"[RATE LIMIT] 429 Too Many Requests → block={block_number}, retrying...")
+                time.sleep(5)
+                continue
+
+            resp.raise_for_status()
+            data = resp.json()
+
+            txs = data.get("items", [])
+            if not txs:
+                print(f"[SKIP] Block {block_number} → No txs found.")
+                break
+
+            # ✅ timestamp는 트랜잭션 첫 항목에서 가져옴
+            block_ts = txs[0].get("timestamp")
+            if block_ts is None or not (start_unix <= block_ts < end_unix):
+                print(f"[SKIP] Block {block_number} ts={block_ts} OUT OF RANGE")
+                break
+
+            print(f"[FETCH] Block {block_number}, cursor={cursor} → {len(txs)} txs")
+
+            for tx in txs:
+                tx["timestamp"] = datetime.fromtimestamp(
+                    block_ts, tz=timezone.utc
+                ).astimezone(KST).strftime('%Y-%m-%d %H:%M:%S')
+            txs_collected.extend(txs)
+
+            cursor = data.get("nextCursor")
+            if not cursor:
+                break
+            if cursor in prev_cursors:
+                print(f"[!] Cursor loop detected: block={block_number}, cursor={cursor}")
+                break
+            prev_cursors.add(cursor)
+
+        except Exception as e:
+            print(f"[ERROR] Block {block_number} fetch failed: {e}")
+            break
+
+    print(f"[FETCH-END] block={block_number}, total txs={len(txs_collected)}")
+    return txs_collected
+
+
 def upload_to_s3(txs: List[Dict[str, Any]], execution_date: datetime) -> None:
-    # KST 기준 경로 구성
     kst_dt = execution_date.replace(tzinfo=timezone.utc).astimezone(KST)
     year = kst_dt.strftime('%Y')
     month = kst_dt.strftime('%m')
@@ -133,10 +148,9 @@ def upload_to_s3(txs: List[Dict[str, Any]], execution_date: datetime) -> None:
     jsonl_path = f"/tmp/{base_filename}.jsonl"
     parquet_filename = f"{base_filename}.parquet"
     empty_filename = f"{base_filename}.empty"
-    s3_key = f"eth/{year}/{month}/{day}/{parquet_filename}"
-    empty_key = f"eth/{year}/{month}/{day}/{empty_filename}"
+    s3_key = f"eth/batch/{year}/{month}/{day}/{parquet_filename}"
+    empty_key = f"eth/batch/{year}/{month}/{day}/{empty_filename}"
 
-    # S3 설정
     bucket = Variable.get("S3_BUCKET_NAME")
     access_key = Variable.get("AWS_ACCESS_KEY_ID")
     secret_key = Variable.get("AWS_SECRET_ACCESS_KEY")
@@ -147,7 +161,7 @@ def upload_to_s3(txs: List[Dict[str, Any]], execution_date: datetime) -> None:
         aws_secret_access_key=secret_key
     )
 
-    # ✅ 중복 방지: S3에 파일이 이미 존재하는 경우 생략
+    # 이미 업로드된 파일이면 skip
     try:
         s3.head_object(Bucket=bucket, Key=s3_key)
         print(f"[!] File already exists at s3://{bucket}/{s3_key} — skipping upload.")
@@ -156,7 +170,7 @@ def upload_to_s3(txs: List[Dict[str, Any]], execution_date: datetime) -> None:
         if e.response['Error']['Code'] != "404":
             raise
 
-    # ✅ txs가 비어 있을 경우 .empty 파일로 기록 후 종료
+    # 트랜잭션이 없으면 .empty 파일 업로드
     if not txs:
         print("[!] No transactions to upload.")
         try:
@@ -164,27 +178,37 @@ def upload_to_s3(txs: List[Dict[str, Any]], execution_date: datetime) -> None:
             print(f"[2] Uploaded empty marker to s3://{bucket}/{empty_key}")
         except Exception as e:
             print(f"[!] Failed to upload empty marker: {e}")
+            raise
         return
 
+    # 트랜잭션이 있으면 parquet 변환 & 업로드
     try:
-        # 1. JSONL 파일로 저장
         with open(jsonl_path, 'w', encoding='utf-8') as f:
             for tx in txs:
                 f.write(json.dumps(tx, ensure_ascii=False) + '\n')
         print(f"[1] JSONL 저장 완료: {jsonl_path}")
 
-        # 2. JSONL → DataFrame
         df = pd.read_json(jsonl_path, lines=True)
-
-        # 3. DataFrame → Parquet
         table = pa.Table.from_pandas(df)
         buffer = io.BytesIO()
         pq.write_table(table, buffer, compression='snappy')
         buffer.seek(0)
 
-        # 4. Parquet → S3 업로드
         s3.upload_fileobj(buffer, bucket, s3_key)
         print(f"[2] Uploaded to s3://{bucket}/{s3_key}")
 
+        # ✅ 업로드 성공 후 .empty 파일 제거 시도
+        try:
+            s3.delete_object(Bucket=bucket, Key=empty_key)
+            print(f"[CLEANUP] Removed empty marker s3://{bucket}/{empty_key}")
+        except s3.exceptions.ClientError as e:
+            if e.response["Error"]["Code"] != "NoSuchKey":
+                print(f"[!] Failed to delete empty marker: {e}")
+
     except Exception as e:
         print(f"[!] Failed to upload parquet to S3: {e}")
+        raise
+    finally:
+        if os.path.exists(jsonl_path):
+            os.remove(jsonl_path)
+            print(f"[CLEANUP] Removed temp file {jsonl_path}")
