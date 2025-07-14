@@ -8,6 +8,7 @@
 
 3. 메인 루프 블록 범위 설정
     INITIAL_START_BLOCK = 1         #시작 블록 번호
+
    => 1으로 해놔도 eth_procession_state.json내에 저장된 블록번호부터 수집 시작.
    
     INITIAL_END_BLOCK   = 5_700_000 #마지막 블록 번호
