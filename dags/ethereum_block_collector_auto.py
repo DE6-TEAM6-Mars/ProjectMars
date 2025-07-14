@@ -7,9 +7,9 @@ import logging
 
 @dag(
     dag_id='ethereum_block_collector_auto',
-    start_date=datetime(2025, 6, 30, 15, 5, 0),
-    schedule_interval='@hourly',
-    catchup=False,
+    start_date=datetime(2025, 7, 1, 1, 5),
+    schedule_interval='5 * * * *',
+    catchup=True,
     max_active_runs=1,
     default_args={
         'owner': 'airflow',
