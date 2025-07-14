@@ -14,7 +14,6 @@ S3_SECRET_KEY="..."
 BUCKET_NAME="de6-team6-bucket"
 TARGET_PREFIX="eth/historical/"
 
-파라미터는 코드 상단 상수로 조정하세요.
 """
 
 import os, json, time, asyncio, datetime, logging, math
@@ -128,7 +127,6 @@ async def _post(session: aiohttp.ClientSession, key: str, payload: Dict) -> Dict
             if attempt == MAX_RETRIES:
                 raise
             await asyncio.sleep(1)
-    # never here
 
 async def fetch_block(block_num: int, key_offset: int=0) -> Tuple[int, List[Dict]]:
     txs: List[Dict] = []
