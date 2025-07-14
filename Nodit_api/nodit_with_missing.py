@@ -270,7 +270,7 @@ async def main():
 
         # missing_blocks가 남아있다면 반복 수집
         while missing_blocks:
-            logging.warning(f"🔁 Retrying missing blocks: {missing_blocks}")
+            logging.warning(f"🔁 Retrying missing blocks: {len(missing_blocks)}개 시도")
             retry_tx, new_missing = await collect_range(missing_blocks)
             tx_data.extend(retry_tx)
             # 남아있는 실패 블록 필터링
