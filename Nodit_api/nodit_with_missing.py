@@ -227,26 +227,109 @@ def upload_to_s3(file_path: str, key_name: str):
     s3 = boto3.client("s3", aws_access_key_id=S3_CONFIG["access_key"],aws_secret_access_key=S3_CONFIG["secret_key"])
     s3.upload_file(file_path, S3_CONFIG["bucket_name"], key_name)
 
-def parquet_and_upload(start_blk:int, end_blk:int, tx_data:List[Dict]):
+def parquet_and_upload(start_blk: int, end_blk: int, tx_data: List[Dict]):
     file_prefix = f"{pad(start_blk)}_{pad(end_blk)}"
+
     if tx_data:
         df = pd.DataFrame(tx_data).fillna("")
+
+        # "decodedInput"은 JSON 문자열로 직렬화
         if "decodedInput" in df.columns:
             df["decodedInput"] = df["decodedInput"].apply(lambda v: json.dumps(v, ensure_ascii=False))
-        table = pa.Table.from_pandas(df)
+
+        # Arrow 스키마 정의
+        arrow_schema = pa.schema([
+            ("transactionHash", pa.string()),
+            ("transactionIndex", pa.string()),
+            ("blockHash", pa.string()),
+            ("blockNumber", pa.int64()),
+            ("from", pa.string()),
+            ("to", pa.string()),
+            ("value", pa.string()),
+            ("input", pa.string()),
+            ("functionSelector", pa.string()),
+            ("nonce", pa.string()),
+            ("gas", pa.string()),
+            ("gasPrice", pa.string()),
+            ("maxFeePerGas", pa.string()),
+            ("maxPriorityFeePerGas", pa.string()),
+            ("gasUsed", pa.string()),
+            ("cumulativeGasUsed", pa.string()),
+            ("effectGasPrice", pa.string()),
+            ("contractAddress", pa.string()),
+            ("type", pa.string()),
+            ("status", pa.string()),
+            ("logsBloom", pa.string()),
+            ("timestamp", pa.string()),
+            ("decodedInput", pa.string()),
+            ("accessList", pa.list_(
+                pa.struct([
+                    ("address", pa.string()),
+                    ("storageKeys", pa.list_(pa.string()))
+                ])
+            )),
+            ("authorizationList", pa.list_(
+                pa.struct([
+                    ("chainId", pa.string()),
+                    ("nonce", pa.string()),
+                    ("address", pa.string()),
+                    ("yParity", pa.string()),
+                    ("r", pa.string()),
+                    ("s", pa.string()),
+                ])
+            )),
+            ("logs", pa.list_(
+                pa.struct([
+                    ("contractAddress", pa.string()),
+                    ("transactionHash", pa.string()),
+                    ("transactionIndex", pa.int64()),
+                    ("blockHash", pa.string()),
+                    ("blockNumber", pa.int64()),
+                    ("data", pa.string()),
+                    ("logIndex", pa.int64()),
+                    ("removed", pa.bool_()),
+                    ("topics", pa.list_(pa.string())),
+                    ("decodedLog", pa.struct([
+                        ("name", pa.string()),
+                        ("eventFragment", pa.string()),
+                        ("signature", pa.string()),
+                        ("eventHash", pa.string()),
+                        ("args", pa.list_(
+                            pa.struct([
+                                ("name", pa.string()),
+                                ("type", pa.string()),
+                                ("value", pa.string())
+                            ])
+                        )),
+                    ]))
+                ])
+            ))
+        ])
+
+        # 누락된 컬럼을 None으로 채움
+        for field in arrow_schema:
+            if field.name not in df.columns:
+                df[field.name] = None
+
+        # Arrow 테이블 생성
+        table = pa.Table.from_pandas(df, schema=arrow_schema, preserve_index=False)
+
+        # 저장 및 업로드
         pq_path = os.path.join(DATA_DIR, f"{file_prefix}.parquet")
         pq.write_table(table, pq_path, compression="snappy")
         upload_to_s3(pq_path, os.path.join(S3_CONFIG["target_prefix"], os.path.basename(pq_path)))
         os.remove(pq_path)
         logging.info(f"Uploaded {file_prefix}.parquet ({len(tx_data)} tx)")
+    
     else:
-        # 빈 블록 범위 → .empty
+        # 빈 파일 처리
         empty_path = os.path.join(DATA_DIR, f"{file_prefix}.empty")
         with open(empty_path, "w") as f:
             f.write("")
         upload_to_s3(empty_path, os.path.join(S3_CONFIG["target_prefix"], os.path.basename(empty_path)))
         os.remove(empty_path)
         logging.info(f"Uploaded empty file {file_prefix}.empty")
+
 
 # ─────────────────────────────────────────────────────────────
 # 7. 메인 루프
