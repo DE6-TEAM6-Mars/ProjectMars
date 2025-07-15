@@ -1,5 +1,5 @@
 from airflow import DAG
-from airflow.operators.postgres_operator import PostgresOperator
+from airflow.providers.postgres.operators.postgres import PostgresOperator  # ✅ 수정된 import
 from airflow.utils.dates import days_ago
 from datetime import datetime, timedelta
 
