@@ -90,12 +90,32 @@ def ethereum_realtime_batch_processor():
         # SQL 쿼리 정의
         create_staging_sql = f"""
         CREATE TEMP TABLE {staging_table_name} (
-            "timestamp" VARCHAR(25),
-            "value" VARCHAR(256),
-            "from" VARCHAR(256),
-            "to" VARCHAR(256),
             "blockNumber" BIGINT,
-            "status" VARCHAR(10)
+            "blockHash" VARCHAR(256),
+            "from" VARCHAR(256),
+            "gas" VARCHAR(256),
+            "gasPrice" VARCHAR(256),
+            "hash" VARCHAR(256),
+            "input" VARCHAR(65535),
+            "nonce" VARCHAR(256),
+            "to" VARCHAR(256),
+            "transactionIndex" VARCHAR(256),
+            "value" VARCHAR(256),
+            "type" VARCHAR(256),
+            "chainId" VARCHAR(256),
+            "v" VARCHAR(256),
+            "r" VARCHAR(256),
+            "s" VARCHAR(256),
+            "status" VARCHAR(10),
+            "timestamp" VARCHAR(25),
+            "contractAddress" VARCHAR(256),
+            "cumulativeGasUsed" VARCHAR(256),
+            "effectiveGasPrice" VARCHAR(256),
+            "gasUsed" VARCHAR(256),
+            "logs" VARCHAR(65535),
+            "logsBloom" VARCHAR(65535),
+            "root" VARCHAR(256),
+            "decoded" VARCHAR(65535)
         );
         """
 
@@ -111,7 +131,7 @@ def ethereum_realtime_batch_processor():
 
         # COPY SQL 구문에 CREDENTIALS를 사용합니다.
         copy_sql = f"""
-        COPY staging_realtime_transaction_temp ("timestamp", "value", "from", "to", "blockNumber", "status")
+        COPY {staging_table_name}
         FROM '{s3_full_path}'
         CREDENTIALS 'aws_access_key_id={access_key};aws_secret_access_key={secret_key}'
         FORMAT AS PARQUET;
