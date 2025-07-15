@@ -135,6 +135,7 @@ def ethereum_realtime_batch_processor():
         FROM '{s3_full_path}'
         CREDENTIALS 'aws_access_key_id={access_key};aws_secret_access_key={secret_key}'
         FORMAT AS PARQUET;
+        TRUNCATECOLUMNS;
         """
 
         delete_sql = f"""
