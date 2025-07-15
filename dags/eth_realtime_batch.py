@@ -126,8 +126,7 @@ def ethereum_realtime_batch_processor():
         CREDENTIALS 'aws_access_key_id={access_key};aws_secret_access_key={secret_key}'
         FORMAT AS PARQUET
         SERIALIZETOJSON
-        TIMEFORMAT 'epochmicros'
-        IGNORECASE; 
+        TIMEFORMAT 'epochmicros'; 
         """
         
         # 멱등성을 위한 DELETE (최종 테이블 대상)
