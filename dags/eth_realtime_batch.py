@@ -90,7 +90,7 @@ def ethereum_realtime_batch_processor():
         # SQL 쿼리 정의
         create_staging_sql = f"""
         CREATE TEMP TABLE {staging_table_name} (
-            "blockNumber" BIGINT,
+            "blockNumber" VARCHAR(256),
             "blockHash" VARCHAR(256),
             "from" VARCHAR(256),
             "gas" VARCHAR(256),
@@ -150,7 +150,7 @@ def ethereum_realtime_batch_processor():
             "value",
             "from",
             "to",
-            "blockNumber",
+            "blockNumber"::BIGINT,
             CASE
                 WHEN "status" = '0x1' THEN '1'
                 ELSE '0'
