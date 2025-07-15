@@ -12,7 +12,7 @@ KST = timezone(timedelta(hours=9))
 @dag(
     dag_id='ethereum_realtime_batch_processor',
     start_date=datetime(2025, 7, 1),
-    schedule_interval='15 * * * *',
+    schedule_interval='30 * * * *',
     catchup=True,
     max_active_runs=1,
     default_args={
@@ -90,9 +90,9 @@ def ethereum_realtime_batch_processor():
         
         create_staging_sql = f"""
         CREATE TEMP TABLE {staging_table_name} (
-                transactionHash         VARCHAR(256),
+            transactionHash         SUPER,
             transactionIndex        BIGINT,
-            blockHash               VARCHAR(256),
+            blockHash               SUPER,
             blockNumber             BIGINT,
             "from"                  VARCHAR(256),
             "to"                    VARCHAR(256),
@@ -107,7 +107,7 @@ def ethereum_realtime_batch_processor():
             gasUsed                 BIGINT,
             cumulativeGasUsed       BIGINT,
             effectGasPrice          BIGINT,
-            contractAddress         VARCHAR(256),
+            contractAddress         SUPER,
             type                    BIGINT,
             status                  BIGINT,
             logsBloom               SUPER,
