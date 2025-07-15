@@ -80,98 +80,71 @@ def ethereum_realtime_batch_processor():
             raise
 
         # --- 3. Redshift에 데이터 적재 ---
-        hook = RedshiftSQLHook(redshift_conn_id=redshift_conn_id)
+        redshift_hook = RedshiftSQLHook(redshift_conn_id=redshift_conn_id)
+        s3_hook = S3Hook(aws_conn_id=aws_conn_id)
+        credentials = s3_hook.get_credentials()
+        access_key, secret_key = credentials.access_key, credentials.secret_key
         
-        from_ts = execution_date - timedelta(hours=1)
-        to_ts = execution_date
-        
+        target_table = "raw_data.realtime_transaction"
         staging_table_name = "staging_realtime_transaction_temp"
-
-        # SQL 쿼리 정의
+        
         create_staging_sql = f"""
         CREATE TEMP TABLE {staging_table_name} (
-            blocknumber VARCHAR(256),
-            blockhash VARCHAR(256),
-            "from" VARCHAR(256),
-            gas VARCHAR(256),
-            gasprice VARCHAR(256),
-            hash VARCHAR(256),
-            input VARCHAR(65535),
-            nonce VARCHAR(256),
-            "to" VARCHAR(256),
-            transactionindex VARCHAR(256),
-            value VARCHAR(256),
-            type VARCHAR(256),
-            chainid VARCHAR(256),
-            v VARCHAR(256),
-            r VARCHAR(256),
-            s VARCHAR(256),
-            status VARCHAR(10),
-            timestamp VARCHAR(25),
-            contractaddress VARCHAR(256),
-            cumulativegasused VARCHAR(256),
-            effectivegasprice VARCHAR(256),
-            gasused VARCHAR(256),
-            logs VARCHAR(65535),
-            logsbloom VARCHAR(65535),
-            root VARCHAR(256),
-            decoded VARCHAR(65535)
+            blocknumber VARCHAR(256), blockhash VARCHAR(256), "from" VARCHAR(256),
+            gas VARCHAR(256), gasprice VARCHAR(256), hash VARCHAR(256),
+            input VARCHAR(65535), nonce VARCHAR(256), "to" VARCHAR(256),
+            transactionindex VARCHAR(256), value VARCHAR(256), type VARCHAR(256),
+            chainid VARCHAR(256), v VARCHAR(256), r VARCHAR(256), s VARCHAR(256),
+            status VARCHAR(256), timestamp VARCHAR(256), contractaddress VARCHAR(256),
+            cumulativegasused VARCHAR(256), effectivegasprice VARCHAR(256),
+            gasused VARCHAR(256), logs VARCHAR(65535), logsbloom VARCHAR(65535),
+            root VARCHAR(256), decoded VARCHAR(65535)
         );
         """
 
-        try:
-            s3_hook = S3Hook(aws_conn_id=aws_conn_id)
-            credentials = s3_hook.get_credentials()
-            
-            access_key = credentials.access_key
-            secret_key = credentials.secret_key
-        except Exception as e:
-            logging.error(f"Airflow Connection '{aws_conn_id}'을(를) 찾거나 읽는 데 실패했습니다: {e}")
-            raise
-
-        # COPY SQL 구문에 CREDENTIALS를 사용합니다.
+        # 스키마가 정확히 일치하지 않아도 VARCHAR로 다 받기 때문에 옵션이 필요 없습니다.
         copy_sql = f"""
         COPY {staging_table_name}
         FROM '{s3_full_path}'
         CREDENTIALS 'aws_access_key_id={access_key};aws_secret_access_key={secret_key}'
-        FORMAT AS PARQUET
-        TRUNCATECOLUMNS;
+        FORMAT AS PARQUET;
         """
-
+        
+        # 멱등성을 위한 DELETE (최종 테이블 대상)
         delete_sql = f"""
-        DELETE FROM raw_data.realtime_transaction
-        WHERE "timestamp" >= '{from_ts.strftime('%Y-%m-%d %H:%M:%S')}'
-          AND "timestamp" < '{to_ts.strftime('%Y-%m-%d %H:%M:%S')}';
+        DELETE FROM {target_table}
+        WHERE "timestamp" >= TO_TIMESTAMP('{execution_date - timedelta(hours=1)}', 'YYYY-MM-DD HH24:MI:SS')
+          AND "timestamp" < TO_TIMESTAMP('{execution_date}', 'YYYY-MM-DD HH24:MI:SS');
         """
 
         insert_sql = f"""
-        INSERT INTO raw_data.realtime_transaction ("timestamp", "value", "from", "to", "blockNumber", "status")
+        INSERT INTO {target_table} ("timestamp", "value", "from", "to", "blockNumber", "status")
         SELECT
-            TO_TIMESTAMP("timestamp", 'YYYY-MM-DD HH24:MI:SS'),
-            "value",
+            TO_TIMESTAMP(timestamp, 'YYYY-MM-DD HH24:MI:SS'), -- 문자열 -> TIMESTAMP
+            value,
             "from",
             "to",
-            "blockn umber"::BIGINT,
+            blocknumber::BIGINT,
             CASE
-                WHEN "status" = '0x1' THEN '1'
+                WHEN status = '0x1' THEN '1'
                 ELSE '0'
-            END AS "status"
+            END AS status
         FROM {staging_table_name};
         """
 
-        conn = hook.get_conn()
+        conn = redshift_hook.get_conn()
         try:
             with conn.cursor() as cursor:
                 logging.info("1. Staging 테이블 생성...")
                 cursor.execute(create_staging_sql)
-
-                logging.info(f"2. S3에서 Staging 테이블로 데이터 COPY... PATH: {s3_full_path}")
+                
+                logging.info(f"2. Staging 테이블로 데이터 COPY...")
                 cursor.execute(copy_sql)
                 
-                logging.info(f"3. Target 테이블에서 기존 데이터 삭제... ({from_ts} ~ {to_ts})")
+                logging.info("3. Target 테이블의 기존 데이터 삭제...")
                 cursor.execute(delete_sql)
-
-                logging.info("4. Staging 테이블에서 Target 테이블로 데이터 INSERT...")
+                
+                logging.info("4. Target 테이블로 변환하며 데이터 INSERT...")
                 cursor.execute(insert_sql)
 
             logging.info("모든 작업 성공. 트랜잭션을 COMMIT 합니다.")
@@ -179,7 +152,6 @@ def ethereum_realtime_batch_processor():
 
         except Exception as e:
             logging.error(f"Redshift 작업 중 오류 발생: {e}")
-            logging.error("트랜잭션을 ROLLBACK 합니다.")
             conn.rollback()
             raise
         finally:
