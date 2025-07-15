@@ -90,32 +90,32 @@ def ethereum_realtime_batch_processor():
         # SQL 쿼리 정의
         create_staging_sql = f"""
         CREATE TEMP TABLE {staging_table_name} (
-            "blockNumber" VARCHAR(256),
-            "blockHash" VARCHAR(256),
+            blocknumber VARCHAR(256),
+            blockhash VARCHAR(256),
             "from" VARCHAR(256),
-            "gas" VARCHAR(256),
-            "gasPrice" VARCHAR(256),
-            "hash" VARCHAR(256),
-            "input" VARCHAR(65535),
-            "nonce" VARCHAR(256),
+            gas VARCHAR(256),
+            gasprice VARCHAR(256),
+            hash VARCHAR(256),
+            input VARCHAR(65535),
+            nonce VARCHAR(256),
             "to" VARCHAR(256),
-            "transactionIndex" VARCHAR(256),
-            "value" VARCHAR(256),
-            "type" VARCHAR(256),
-            "chainId" VARCHAR(256),
-            "v" VARCHAR(256),
-            "r" VARCHAR(256),
-            "s" VARCHAR(256),
-            "status" VARCHAR(10),
-            "timestamp" VARCHAR(25),
-            "contractAddress" VARCHAR(256),
-            "cumulativeGasUsed" VARCHAR(256),
-            "effectiveGasPrice" VARCHAR(256),
-            "gasUsed" VARCHAR(256),
-            "logs" VARCHAR(65535),
-            "logsBloom" VARCHAR(65535),
-            "root" VARCHAR(256),
-            "decoded" VARCHAR(65535)
+            transactionindex VARCHAR(256),
+            value VARCHAR(256),
+            type VARCHAR(256),
+            chainid VARCHAR(256),
+            v VARCHAR(256),
+            r VARCHAR(256),
+            s VARCHAR(256),
+            status VARCHAR(10),
+            timestamp VARCHAR(25),
+            contractaddress VARCHAR(256),
+            cumulativegasused VARCHAR(256),
+            effectivegasprice VARCHAR(256),
+            gasused VARCHAR(256),
+            logs VARCHAR(65535),
+            logsbloom VARCHAR(65535),
+            root VARCHAR(256),
+            decoded VARCHAR(65535)
         );
         """
 
@@ -134,7 +134,7 @@ def ethereum_realtime_batch_processor():
         COPY {staging_table_name}
         FROM '{s3_full_path}'
         CREDENTIALS 'aws_access_key_id={access_key};aws_secret_access_key={secret_key}'
-        FORMAT AS PARQUET;
+        FORMAT AS PARQUET
         TRUNCATECOLUMNS;
         """
 
@@ -151,7 +151,7 @@ def ethereum_realtime_batch_processor():
             "value",
             "from",
             "to",
-            "blockNumber"::BIGINT,
+            "blockn umber"::BIGINT,
             CASE
                 WHEN "status" = '0x1' THEN '1'
                 ELSE '0'
