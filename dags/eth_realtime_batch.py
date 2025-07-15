@@ -125,7 +125,9 @@ def ethereum_realtime_batch_processor():
         FROM '{s3_full_path}'
         CREDENTIALS 'aws_access_key_id={access_key};aws_secret_access_key={secret_key}'
         FORMAT AS PARQUET
-        SERIALIZETOJSON;
+        SERIALIZETOJSON
+        TIMEFORMAT 'epochmicros'
+        IGNORECASE; 
         """
         
         # 멱등성을 위한 DELETE (최종 테이블 대상)
@@ -138,8 +140,8 @@ def ethereum_realtime_batch_processor():
         insert_sql = f"""
         INSERT INTO {target_table} ("timestamp", "value", "from", "to", "blockNumber", "status")
         SELECT
-            TIMESTAMP 'epoch' + ("timestamp" / 1000000000) * INTERVAL '1 second',
-            value,
+            TIMESTAMP 'epoch' + ("timestamp" / 1000000) * INTERVAL '1 second',
+            "value",
             "from",
             "to",
             "blockNumber",
