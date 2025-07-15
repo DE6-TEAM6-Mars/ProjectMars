@@ -5,6 +5,7 @@ import boto3
 from airflow.decorators import dag, task
 from airflow.models import Variable
 from airflow.providers.amazon.aws.hooks.redshift_sql import RedshiftSQLHook
+from airflow.providers.amazon.aws.hooks.s3 import S3Hook
 
 KST = timezone(timedelta(hours=9))
 
@@ -43,6 +44,7 @@ def ethereum_realtime_batch_processor():
         # --- 1. S3 경로 및 변수 설정 ---
         s3_bucket = "S3_BUCKET_NAME"
         redshift_conn_id = "RedshiftConn"
+        aws_conn_id = "S3Conn" 
 
         kst_dt = execution_date.replace(tzinfo=timezone.utc).astimezone(KST)
         year, month, day = kst_dt.strftime('%Y'), kst_dt.strftime('%m'), kst_dt.strftime('%d')
@@ -97,10 +99,21 @@ def ethereum_realtime_batch_processor():
         );
         """
 
+        try:
+            s3_hook = S3Hook(aws_conn_id=aws_conn_id)
+            credentials = s3_hook.get_credentials()
+            
+            access_key = credentials.access_key
+            secret_key = credentials.secret_key
+        except Exception as e:
+            logging.error(f"Airflow Connection '{aws_conn_id}'을(를) 찾거나 읽는 데 실패했습니다: {e}")
+            raise
+
+        # COPY SQL 구문에 CREDENTIALS를 사용합니다.
         copy_sql = f"""
-        COPY {staging_table_name} ("timestamp", "value", "from", "to", "blockNumber", "status")
+        COPY staging_realtime_transaction_temp ("timestamp", "value", "from", "to", "blockNumber", "status")
         FROM '{s3_full_path}'
-        IAM_ROLE '{iam_role_arn}'
+        CREDENTIALS 'aws_access_key_id={access_key};aws_secret_access_key={secret_key}'
         FORMAT AS PARQUET;
         """
 
