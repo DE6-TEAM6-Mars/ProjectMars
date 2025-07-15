@@ -90,15 +90,32 @@ def ethereum_realtime_batch_processor():
         
         create_staging_sql = f"""
         CREATE TEMP TABLE {staging_table_name} (
-            blocknumber VARCHAR(256), blockhash VARCHAR(256), "from" VARCHAR(256),
-            gas VARCHAR(256), gasprice VARCHAR(256), hash VARCHAR(256),
-            input VARCHAR(65535), nonce VARCHAR(256), "to" VARCHAR(256),
-            transactionindex VARCHAR(256), value VARCHAR(256), type VARCHAR(256),
-            chainid VARCHAR(256), v VARCHAR(256), r VARCHAR(256), s VARCHAR(256),
-            status VARCHAR(256), timestamp VARCHAR(256), contractaddress VARCHAR(256),
-            cumulativegasused VARCHAR(256), effectivegasprice VARCHAR(256),
-            gasused VARCHAR(256), logs VARCHAR(65535), logsbloom VARCHAR(65535),
-            root VARCHAR(256), decoded VARCHAR(65535)
+                transactionHash         VARCHAR,
+            transactionIndex        VARCHAR,
+            blockHash               VARCHAR,
+            blockNumber             BIGINT,
+            "from"                  VARCHAR,
+            "to"                    VARCHAR,
+            value                   DOUBLE PRECISION,
+            input                   VARCHAR(4096),
+            functionSelector        VARCHAR,
+            nonce                   VARCHAR,
+            gas                     VARCHAR,
+            gasPrice                VARCHAR,
+            maxFeePerGas            VARCHAR,
+            maxPriorityFeePerGas    VARCHAR,
+            gasUsed                 VARCHAR,
+            cumulativeGasUsed       VARCHAR,
+            effectGasPrice          VARCHAR,
+            contractAddress         VARCHAR,
+            type                    VARCHAR,
+            status                  VARCHAR,
+            logsBloom               VARCHAR(8192),
+            timestamp               BIGINT,
+            decodedInput            VARCHAR(8192),
+            accessList              SUPER,
+            authorizationList       SUPER,
+            logs                    SUPER
         );
         """
 
@@ -107,7 +124,8 @@ def ethereum_realtime_batch_processor():
         COPY {staging_table_name}
         FROM '{s3_full_path}'
         CREDENTIALS 'aws_access_key_id={access_key};aws_secret_access_key={secret_key}'
-        FORMAT AS PARQUET;
+        FORMAT AS PARQUET
+        SERIALIZETOJSON;
         """
         
         # 멱등성을 위한 DELETE (최종 테이블 대상)
@@ -120,7 +138,7 @@ def ethereum_realtime_batch_processor():
         insert_sql = f"""
         INSERT INTO {target_table} ("timestamp", "value", "from", "to", "blockNumber", "status")
         SELECT
-            TO_TIMESTAMP(timestamp, 'YYYY-MM-DD HH24:MI:SS'), -- 문자열 -> TIMESTAMP
+            TO_TIMESTAMP(timestamp, 'YYYY-MM-DD HH24:MI:SS'),
             value,
             "from",
             "to",
