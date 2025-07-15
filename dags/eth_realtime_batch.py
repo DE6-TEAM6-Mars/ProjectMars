@@ -90,29 +90,29 @@ def ethereum_realtime_batch_processor():
         
         create_staging_sql = f"""
         CREATE TEMP TABLE {staging_table_name} (
-                transactionHash         VARCHAR,
-            transactionIndex        VARCHAR,
-            blockHash               VARCHAR,
+                transactionHash         VARCHAR(256),
+            transactionIndex        BIGINT,
+            blockHash               VARCHAR(256),
             blockNumber             BIGINT,
-            "from"                  VARCHAR,
-            "to"                    VARCHAR,
+            "from"                  VARCHAR(256),
+            "to"                    VARCHAR(256),
             value                   DOUBLE PRECISION,
-            input                   VARCHAR(4096),
-            functionSelector        VARCHAR,
-            nonce                   VARCHAR,
-            gas                     VARCHAR,
-            gasPrice                VARCHAR,
-            maxFeePerGas            VARCHAR,
-            maxPriorityFeePerGas    VARCHAR,
-            gasUsed                 VARCHAR,
-            cumulativeGasUsed       VARCHAR,
-            effectGasPrice          VARCHAR,
-            contractAddress         VARCHAR,
-            type                    VARCHAR,
-            status                  VARCHAR,
+            input                   SUPER,
+            functionSelector        VARCHAR(256),
+            nonce                   BIGINT,
+            gas                     BIGINT,
+            gasPrice                BIGINT,
+            maxFeePerGas            DOUBLE PRECISION,
+            maxPriorityFeePerGas    DOUBLE PRECISION,
+            gasUsed                 BIGINT,
+            cumulativeGasUsed       BIGINT,
+            effectGasPrice          BIGINT,
+            contractAddress         VARCHAR(256),
+            type                    BIGINT,
+            status                  BIGINT,
             logsBloom               VARCHAR(8192),
             timestamp               BIGINT,
-            decodedInput            VARCHAR(8192),
+            decodedInput            SUPER,
             accessList              SUPER,
             authorizationList       SUPER,
             logs                    SUPER
@@ -138,11 +138,11 @@ def ethereum_realtime_batch_processor():
         insert_sql = f"""
         INSERT INTO {target_table} ("timestamp", "value", "from", "to", "blockNumber", "status")
         SELECT
-            TO_TIMESTAMP(timestamp, 'YYYY-MM-DD HH24:MI:SS'),
+            TIMESTAMP 'epoch' + ("timestamp" / 1000000000) * INTERVAL '1 second',
             value,
             "from",
             "to",
-            blocknumber::BIGINT,
+            "blockNumber",
             CASE
                 WHEN status = '0x1' THEN '1'
                 ELSE '0'
