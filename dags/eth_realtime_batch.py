@@ -42,7 +42,7 @@ def ethereum_realtime_batch_processor():
         logging.info(f"Load to Redshift 태스크 시작. Execution Date: {execution_date}")
 
         # --- 1. S3 경로 및 변수 설정 ---
-        s3_bucket = "S3_BUCKET_NAME"
+        s3_bucket = Variable.get("S3_BUCKET_NAME")
         redshift_conn_id = "RedshiftConn"
         aws_conn_id = "S3Conn" 
 
