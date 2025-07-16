@@ -3,39 +3,6 @@ from airflow.decorators import dag, task
 from airflow.operators.python import get_current_context
 import logging
 
-@dag(
-    dag_id='ethereum_block_partition_load_test',
-    start_date=datetime(2025, 7, 1, 1, 5),
-    schedule_interval='5 * * * *',
-    catchup=False,
-    max_active_runs=1,
-    default_args={
-        'owner': 'airflow',
-        'retries': 1,
-        'retry_delay': timedelta(minutes=5),
-    },
-    tags=['ethereum', 'block', 'collector']
-)
-def ethereum_block_partition_load_test():
-    @task()
-    def load_test() -> None:
-        context = get_current_context()
-        execution_date: datetime = context["execution_date"]
-
-        # UTC 기준의 execution_date를 사용 (Airflow 내부 시간 기준)
-        aligned_execution = execution_date.replace(minute=0, second=0, microsecond=0)
-        from_ts = aligned_execution - timedelta(hours=1)
-        to_ts = aligned_execution
-
-        load_partition_and_table(from_ts)
-
-    load_test()
-
-
-ethereum_block_partition_load_test()
-
-
-
 # 추가함
 from datetime import timezone
 from airflow.providers.postgres.hooks.postgres import PostgresHook
@@ -172,3 +139,36 @@ def load_partition_and_table(from_ts: datetime) -> None:
     conn.close()
     
     print(f"[INFO] Data loaded into {database_name}.{table_name} for partition {year}-{month}-{day} {hour}.")
+
+
+
+@dag(
+    dag_id='ethereum_block_partition_load_test',
+    start_date=datetime(2025, 7, 1, 1, 5),
+    schedule_interval='5 * * * *',
+    catchup=False,
+    max_active_runs=1,
+    default_args={
+        'owner': 'airflow',
+        'retries': 1,
+        'retry_delay': timedelta(minutes=5),
+    },
+    tags=['ethereum', 'block', 'collector']
+)
+def ethereum_block_partition_load_test():
+    @task()
+    def load_test() -> None:
+        context = get_current_context()
+        execution_date: datetime = context["execution_date"]
+
+        # UTC 기준의 execution_date를 사용 (Airflow 내부 시간 기준)
+        aligned_execution = execution_date.replace(minute=0, second=0, microsecond=0)
+        from_ts = aligned_execution - timedelta(hours=1)
+        to_ts = aligned_execution
+
+        load_partition_and_table(from_ts)
+
+    load_test()
+
+
+dag_instance = ethereum_block_partition_load_test() 
