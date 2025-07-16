@@ -1,4 +1,3 @@
-import os
 import requests
 import pandas as pd
 import json
@@ -139,17 +138,16 @@ def fetch_block(block_number: int, api_cycle, start_unix: int, end_unix: int) ->
     return txs_collected
 
 
-def upload_to_s3(txs: List[Dict[str, Any]], execution_date: datetime) -> None:
-    kst_dt = execution_date.replace(tzinfo=timezone.utc).astimezone(KST)
+def upload_to_s3(txs: List[Dict[str, Any]], from_ts: datetime) -> None:
+    kst_dt = from_ts.replace(tzinfo=timezone.utc).astimezone(KST)
     year = kst_dt.strftime('%Y')
     month = kst_dt.strftime('%m')
     day = kst_dt.strftime('%d')
+    hour = kst_dt.strftime('%H')
     base_filename = f"ETH_{kst_dt.strftime('%Y%m%d_%H')}"
-    jsonl_path = f"/tmp/{base_filename}.jsonl"
-    parquet_filename = f"{base_filename}.parquet"
-    empty_filename = f"{base_filename}.empty"
-    s3_key = f"eth/batch/{year}/{month}/{day}/{parquet_filename}"
-    empty_key = f"eth/batch/{year}/{month}/{day}/{empty_filename}"
+    partition_prefix = f"eth/batch/year={year}/month={month}/day={day}/hour={hour}"
+    s3_key = f"{partition_prefix}/{base_filename}.parquet"
+    empty_key = f"{partition_prefix}/{base_filename}.empty"
 
     bucket = Variable.get("S3_BUCKET_NAME")
     access_key = Variable.get("AWS_ACCESS_KEY_ID")
@@ -181,23 +179,98 @@ def upload_to_s3(txs: List[Dict[str, Any]], execution_date: datetime) -> None:
             raise
         return
 
-    # 트랜잭션이 있으면 parquet 변환 & 업로드
+    # 트랜잭션이 있으면 Parquet 변환 & 업로드 (Arrow 기반)
     try:
-        with open(jsonl_path, 'w', encoding='utf-8') as f:
-            for tx in txs:
-                f.write(json.dumps(tx, ensure_ascii=False) + '\n')
-        print(f"[1] JSONL 저장 완료: {jsonl_path}")
+        df = pd.DataFrame(txs).fillna("")
+        # Arrow 스키마 정의
+        arrow_schema = pa.schema([
+            ("transactionHash", pa.string()),
+            ("transactionIndex", pa.string()),
+            ("blockHash", pa.string()),
+            ("blockNumber", pa.int64()),
+            ("from", pa.string()),
+            ("to", pa.string()),
+            ("value", pa.string()),
+            ("input", pa.string()),
+            ("functionSelector", pa.string()),
+            ("nonce", pa.string()),
+            ("gas", pa.string()),
+            ("gasPrice", pa.string()),
+            ("maxFeePerGas", pa.string()),
+            ("maxPriorityFeePerGas", pa.string()),
+            ("gasUsed", pa.string()),
+            ("cumulativeGasUsed", pa.string()),
+            ("effectGasPrice", pa.string()),
+            ("contractAddress", pa.string()),
+            ("type", pa.string()),
+            ("status", pa.string()),
+            ("logsBloom", pa.string()),
+            ("timestamp", pa.string()),
+            ("decodedInput", pa.string()),
+            ("accessList", pa.list_(
+                pa.struct([
+                    ("address", pa.string()),
+                    ("storageKeys", pa.list_(pa.string()))
+                ])
+            )),
+            ("authorizationList", pa.list_(
+                pa.struct([
+                    ("chainId", pa.string()),
+                    ("nonce", pa.string()),
+                    ("address", pa.string()),
+                    ("yParity", pa.string()),
+                    ("r", pa.string()),
+                    ("s", pa.string()),
+                ])
+            )),
+            ("logs", pa.list_(
+                pa.struct([
+                    ("contractAddress", pa.string()),
+                    ("transactionHash", pa.string()),
+                    ("transactionIndex", pa.int64()),
+                    ("blockHash", pa.string()),
+                    ("blockNumber", pa.int64()),
+                    ("data", pa.string()),
+                    ("logIndex", pa.int64()),
+                    ("removed", pa.bool_()),
+                    ("topics", pa.list_(pa.string())),
+                    ("decodedLog", pa.struct([
+                        ("name", pa.string()),
+                        ("eventFragment", pa.string()),
+                        ("signature", pa.string()),
+                        ("eventHash", pa.string()),
+                        ("args", pa.list_(
+                            pa.struct([
+                                ("name", pa.string()),
+                                ("type", pa.string()),
+                                ("value", pa.string())
+                            ])
+                        )),
+                    ]))
+                ])
+            ))
+        ])
 
-        df = pd.read_json(jsonl_path, lines=True)
-        table = pa.Table.from_pandas(df)
+        # 누락된 컬럼 채우기
+        for field in arrow_schema:
+            if field.name not in df.columns:
+                df[field.name] = None
+
+        # decodedInput 직렬화
+        if "decodedInput" in df.columns:
+            df["decodedInput"] = df["decodedInput"].apply(lambda v: json.dumps(v, ensure_ascii=False))
+
+        # Arrow 테이블로 변환
+        table = pa.Table.from_pandas(df, schema=arrow_schema, preserve_index=False)
         buffer = io.BytesIO()
         pq.write_table(table, buffer, compression='snappy')
         buffer.seek(0)
 
+        # 업로드
         s3.upload_fileobj(buffer, bucket, s3_key)
         print(f"[2] Uploaded to s3://{bucket}/{s3_key}")
 
-        # ✅ 업로드 성공 후 .empty 파일 제거 시도
+        # empty marker 제거 시도
         try:
             s3.delete_object(Bucket=bucket, Key=empty_key)
             print(f"[CLEANUP] Removed empty marker s3://{bucket}/{empty_key}")
@@ -208,7 +281,3 @@ def upload_to_s3(txs: List[Dict[str, Any]], execution_date: datetime) -> None:
     except Exception as e:
         print(f"[!] Failed to upload parquet to S3: {e}")
         raise
-    finally:
-        if os.path.exists(jsonl_path):
-            os.remove(jsonl_path)
-            print(f"[CLEANUP] Removed temp file {jsonl_path}")

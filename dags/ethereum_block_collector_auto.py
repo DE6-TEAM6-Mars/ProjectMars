@@ -25,14 +25,15 @@ def ethereum_block_collector_auto():
         execution_date: datetime = context["execution_date"]
 
         # UTC 기준의 execution_date를 사용 (Airflow 내부 시간 기준)
-        from_ts = execution_date - timedelta(hours=1)
-        to_ts = execution_date
+        aligned_execution = execution_date.replace(minute=0, second=0, microsecond=0)
+        from_ts = aligned_execution - timedelta(hours=1)
+        to_ts = aligned_execution
 
         logging.info(f"[COLLECT] Target time range: {from_ts} → {to_ts}")
         txs = collect_raw_transactions(from_ts, to_ts)
         logging.info(f"[COLLECT] Total collected txs: {len(txs)}")
 
-        upload_to_s3(txs, execution_date)
+        upload_to_s3(txs, from_ts)
 
     collect_and_save()
 
