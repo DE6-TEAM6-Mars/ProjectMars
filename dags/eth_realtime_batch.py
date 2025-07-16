@@ -12,7 +12,7 @@ KST = timezone(timedelta(hours=9))
 @dag(
     dag_id='ethereum_realtime_batch_processor',
     start_date=datetime(2025, 7, 1),
-    schedule_interval='15 * * * *',
+    schedule_interval='30 * * * *',
     catchup=True,
     max_active_runs=1,
     default_args={
@@ -90,15 +90,32 @@ def ethereum_realtime_batch_processor():
         
         create_staging_sql = f"""
         CREATE TEMP TABLE {staging_table_name} (
-            blocknumber VARCHAR(256), blockhash VARCHAR(256), "from" VARCHAR(256),
-            gas VARCHAR(256), gasprice VARCHAR(256), hash VARCHAR(256),
-            input VARCHAR(65535), nonce VARCHAR(256), "to" VARCHAR(256),
-            transactionindex VARCHAR(256), value VARCHAR(256), type VARCHAR(256),
-            chainid VARCHAR(256), v VARCHAR(256), r VARCHAR(256), s VARCHAR(256),
-            status VARCHAR(256), timestamp VARCHAR(256), contractaddress VARCHAR(256),
-            cumulativegasused VARCHAR(256), effectivegasprice VARCHAR(256),
-            gasused VARCHAR(256), logs VARCHAR(65535), logsbloom VARCHAR(65535),
-            root VARCHAR(256), decoded VARCHAR(65535)
+            transactionHash         SUPER,
+            transactionIndex        BIGINT,
+            blockHash               SUPER,
+            blockNumber             BIGINT,
+            "from"                  VARCHAR(256),
+            "to"                    VARCHAR(256),
+            value                   DOUBLE PRECISION,
+            input                   SUPER,
+            functionSelector        SUPER,
+            nonce                   BIGINT,
+            gas                     BIGINT,
+            gasPrice                BIGINT,
+            maxFeePerGas            DOUBLE PRECISION,
+            maxPriorityFeePerGas    DOUBLE PRECISION,
+            gasUsed                 BIGINT,
+            cumulativeGasUsed       BIGINT,
+            effectGasPrice          BIGINT,
+            contractAddress         SUPER,
+            type                    BIGINT,
+            status                  BIGINT,
+            logsBloom               SUPER,
+            timestamp               SUPER,
+            decodedInput            SUPER,
+            accessList              SUPER,
+            authorizationList       SUPER,
+            logs                    SUPER
         );
         """
 
@@ -107,7 +124,8 @@ def ethereum_realtime_batch_processor():
         COPY {staging_table_name}
         FROM '{s3_full_path}'
         CREDENTIALS 'aws_access_key_id={access_key};aws_secret_access_key={secret_key}'
-        FORMAT AS PARQUET;
+        FORMAT AS PARQUET
+        SERIALIZETOJSON
         """
         
         # 멱등성을 위한 DELETE (최종 테이블 대상)
@@ -120,11 +138,11 @@ def ethereum_realtime_batch_processor():
         insert_sql = f"""
         INSERT INTO {target_table} ("timestamp", "value", "from", "to", "blockNumber", "status")
         SELECT
-            TO_TIMESTAMP(timestamp, 'YYYY-MM-DD HH24:MI:SS'), -- 문자열 -> TIMESTAMP
-            value,
+            TIMESTAMP 'epoch' + ("timestamp"::BIGINT / 1000000000) * INTERVAL '1 second',
+            "value",
             "from",
             "to",
-            blocknumber::BIGINT,
+            "blockNumber",
             CASE
                 WHEN status = '0x1' THEN '1'
                 ELSE '0'
