@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from airflow.decorators import dag, task
 from airflow.operators.python import get_current_context
-from utils import collect_raw_transactions, upload_to_s3
+from utils import collect_raw_transactions, upload_to_s3, load_partition_and_table
 import logging
 
 
@@ -34,6 +34,7 @@ def ethereum_block_collector_auto():
         logging.info(f"[COLLECT] Total collected txs: {len(txs)}")
 
         upload_to_s3(txs, from_ts)
+        load_partition_and_table(from_ts)
 
     collect_and_save()
 
