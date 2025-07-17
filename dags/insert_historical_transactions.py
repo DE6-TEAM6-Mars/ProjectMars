@@ -40,7 +40,7 @@ def insert_transactions_to_redshift():
 
     # SQL 쿼리 실행
     query = f"""
-        INSERT INTO raw_data.test_historical_transactions
+        INSERT INTO adhoc.test_historical_transactions
         SELECT
             transactionhash,
             blocknumber,
@@ -63,7 +63,7 @@ default_args = {
 }
 
 with DAG(
-    dag_id='insert_historical_transactions_no_operator',
+    dag_id='insert_historical_transactions',
     default_args=default_args,
     description='Insert Spectrum ETH tx into Redshift (via psycopg2 + Airflow Connection)',
     schedule_interval=None,
