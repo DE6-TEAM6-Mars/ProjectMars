@@ -10,11 +10,12 @@ def build_dynamic_where_clause(start_date: datetime, end_date: datetime) -> str:
     conditions = []
     while current <= end_date:
         year = current.strftime("%Y")
-        month = current.strftime("%m")
-        day = current.strftime("%d")
+        month = str(int(current.strftime("%m")))  # 앞의 0 제거
+        day = str(int(current.strftime("%d")))    # 앞의 0 제거
         conditions.append(f"(year = '{year}' AND month = '{month}' AND day = '{day}')")
         current += timedelta(days=1)
     return " OR\n".join(conditions)
+
 
 # 날짜 범위 지정
 START_DATE = datetime(2015, 7, 1)
