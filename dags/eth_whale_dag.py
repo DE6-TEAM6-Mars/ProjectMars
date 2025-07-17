@@ -112,7 +112,7 @@ def copy_to_redshift(**kwargs):
     region =  "ap-northeast-2"
     iam_role = Variable.get("S3_IAM_ROLE")
 
-    redshift = PostgresHook(postgres_conn_id="REDSHIFT_CONN_ID")
+    redshift = PostgresHook(postgres_conn_id="RedshiftConn")
 
     create_sql = """
     CREATE TABLE IF NOT EXISTS raw_data.eth_whale (
