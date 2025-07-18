@@ -58,7 +58,7 @@ def collect_raw_transactions(from_ts: datetime, to_ts: datetime) -> List[Dict[st
     api_cycle = cycle(NODIT_API_KEYS)
     raw_txs: List[Dict[str, Any]] = []
 
-    with ThreadPoolExecutor(max_workers=10) as executor:
+    with ThreadPoolExecutor(max_workers=3) as executor:
         futures = [
             executor.submit(fetch_block, blk, api_cycle, start_unix, end_unix)
             for blk in range(start_block, end_block + 1)
