@@ -34,7 +34,10 @@ def ethereum_block_collector_auto():
         logging.info(f"[COLLECT] Total collected txs: {len(txs)}")
 
         upload_to_s3(txs, from_ts)
-        load_partition_and_table(from_ts)
+        if txs:  # ✅ 데이터가 존재할 때만 Glue & Redshift 처리
+            load_partition_and_table(from_ts)
+        else:
+            logging.warning(f"[SKIP] No transactions collected — skipping Glue & Redshift load for {from_ts}")
 
     collect_and_save()
 
