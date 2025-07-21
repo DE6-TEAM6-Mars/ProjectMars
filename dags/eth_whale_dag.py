@@ -34,7 +34,13 @@ dag = DAG(
 # ─────────────────────────────────────────────
 def crawl_and_save_csv(**kwargs):
     BASE_URL = "https://etherscan.io/accounts"
-    HEADERS = {"User-Agent": "Mozilla/5.0"}
+    HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/115.0.0.0 Safari/537.36"
+    )
+}
 
     def parse_wallets_from_page(html):
         soup = BeautifulSoup(html, "html.parser")
@@ -109,13 +115,15 @@ def upload_to_s3(**kwargs):
 def copy_to_redshift(**kwargs):
     s3_key = kwargs['ti'].xcom_pull(key='s3_key', task_ids='upload_to_s3')
     bucket = Variable.get("S3_BUCKET_NAME")
-    region =  "ap-northeast-2"
-    iam_role = Variable.get("S3_IAM_ROLE")
+    region = "ap-northeast-2"
+    
+    access_key = Variable.get("AWS_ACCESS_KEY_ID")
+    secret_key = Variable.get("AWS_SECRET_ACCESS_KEY")
 
-    redshift = PostgresHook(postgres_conn_id="RedshiftConn")
+    redshift = PostgresHook(postgres_conn_id="REDSHIFT_CONN_ID")
 
     create_sql = """
-    CREATE TABLE IF NOT EXISTS raw_data.eth_whale (
+    CREATE TABLE IF NOT EXISTS raw_data.eth_top_holders (
         rank INT,
         address VARCHAR,
         address_nametag VARCHAR,
@@ -126,9 +134,9 @@ def copy_to_redshift(**kwargs):
     """
 
     copy_sql = f"""
-    COPY raw_data.eth_whale
+    COPY raw_data.eth_top_holders
     FROM 's3://{bucket}/{s3_key}'
-    IAM_ROLE '{iam_role}'
+    CREDENTIALS 'aws_access_key_id={access_key};aws_secret_access_key={secret_key}'
     REGION '{region}'
     FORMAT AS CSV
     IGNOREHEADER 1
@@ -138,7 +146,7 @@ def copy_to_redshift(**kwargs):
     with redshift.get_conn() as conn:
         with conn.cursor() as cursor:
             cursor.execute(create_sql)
-            cursor.execute("TRUNCATE TABLE raw_data.eth_whale")
+            cursor.execute("TRUNCATE TABLE raw_data.eth_top_holders")
             cursor.execute(copy_sql)
         conn.commit()
 
