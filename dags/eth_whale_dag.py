@@ -85,22 +85,31 @@ def crawl_and_save_csv(**kwargs):
         all_wallets = []
         for page in range(1, pages + 1):
             url = f"{BASE_URL}/{page}?ps=100"
-            response = requests.get(url, headers=HEADERS)
-            if response.status_code != 200:
-                print(f"[ERROR] Failed to fetch page {page}")
+            try:
+                response = requests.get(url, headers=HEADERS, timeout=10)
+                if response.status_code != 200:
+                    print(f"[ERROR] Failed to fetch page {page} (Status code: {response.status_code})")
+                    continue
+                wallets = parse_wallets_from_page(response.text)
+                all_wallets.extend(wallets)
+            except requests.RequestException as e:
+                print(f"[ERROR] Exception while fetching page {page}: {e}")
                 continue
-            wallets = parse_wallets_from_page(response.text)
-            all_wallets.extend(wallets)
-            time.sleep(1.5)
-        return pd.DataFrame(all_wallets)
 
-    # 날짜 기반 경로 및 inserted_at 추가
+            time.sleep(3)  # ✅ 봇 차단 방지용 sleep 증가
+
+        df = pd.DataFrame(all_wallets)
+        if df.empty:
+            raise ValueError("[FAILURE] No wallet data was collected. Failing DAG.")  # ✅ 결과 비었을 때 DAG 실패 유도
+
+        return df
+
     run_date = kwargs['ds']  # yyyy-mm-dd
     local_dir = f"/tmp/eth_data/{run_date}"
     os.makedirs(local_dir, exist_ok=True)
 
     df = crawl_top_eth_wallets(pages=100)
-    df["inserted_at"] = pd.to_datetime(run_date)  # 또는 datetime.utcnow()
+    df["inserted_at"] = pd.to_datetime(run_date)
     df.to_csv(f"{local_dir}/top10000_holders_eth.csv", index=False)
 
 # ─────────────────────────────────────────────
