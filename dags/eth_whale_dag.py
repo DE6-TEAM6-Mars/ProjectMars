@@ -126,6 +126,7 @@ def upload_to_s3(**kwargs):
 
     kwargs['ti'].xcom_push(key='s3_key', value=s3_key)
 
+
 # ─────────────────────────────────────────────
 # Step 3: Redshift COPY
 # ─────────────────────────────────────────────
@@ -137,7 +138,7 @@ def copy_to_redshift(**kwargs):
     access_key = Variable.get("AWS_ACCESS_KEY_ID")
     secret_key = Variable.get("AWS_SECRET_ACCESS_KEY")
 
-    redshift = PostgresHook(postgres_conn_id="REDSHIFT_CONN_ID")
+    redshift = PostgresHook(postgres_conn_id="RedshiftConn")
 
     create_sql = """
     CREATE TABLE IF NOT EXISTS raw_data.eth_top_holders (
@@ -164,6 +165,7 @@ def copy_to_redshift(**kwargs):
         with conn.cursor() as cursor:
             cursor.execute(create_sql)
             cursor.execute("TRUNCATE TABLE raw_data.eth_top_holders")
+            print(f"[INFO] Copying from s3://{bucket}/{s3_key} to Redshift table raw_data.eth_top_holders")
             cursor.execute(copy_sql)
         conn.commit()
 
