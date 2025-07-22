@@ -131,10 +131,11 @@ def upload_to_s3(**kwargs):
 # Step 3: Redshift COPY
 # ─────────────────────────────────────────────
 def copy_to_redshift(**kwargs):
-    s3_key = kwargs['ti'].xcom_pull(key='s3_key', task_ids='upload_to_s3')
+    run_date = kwargs["ds"]
+    s3_key = f"eth/whale/{run_date}/top10000_holders_eth.csv"
     bucket = Variable.get("S3_BUCKET_NAME")
     region = "ap-northeast-2"
-    
+
     access_key = Variable.get("AWS_ACCESS_KEY_ID")
     secret_key = Variable.get("AWS_SECRET_ACCESS_KEY")
 
@@ -158,7 +159,7 @@ def copy_to_redshift(**kwargs):
     REGION '{region}'
     FORMAT AS CSV
     IGNOREHEADER 1
-    DELIMITER ',';
+    DELIMITER ','; 
     """
 
     with redshift.get_conn() as conn:
@@ -168,7 +169,6 @@ def copy_to_redshift(**kwargs):
             print(f"[INFO] Copying from s3://{bucket}/{s3_key} to Redshift table raw_data.eth_top_holders")
             cursor.execute(copy_sql)
         conn.commit()
-
 # ─────────────────────────────────────────────
 # DAG Task 연결
 # ─────────────────────────────────────────────
