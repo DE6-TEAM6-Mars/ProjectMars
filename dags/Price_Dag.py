@@ -1,12 +1,16 @@
 import pendulum
 import requests
 import logging
-
+from utils import slack_callback
 from airflow.decorators import dag, task
 from airflow.providers.amazon.aws.hooks.redshift_sql import RedshiftSQLHook
 
+default_args = {
+    'on_failure_callback': slack_callback,
+}
 @dag(
     dag_id="daily_eth_price_etl",
+    default_args = default_args,
     start_date=pendulum.datetime(2025, 7, 9, tz="Asia/Seoul"),
     schedule_interval="5 9 * * *",
     description="[TaskFlow] 매일 ETH 가격과 환율을 가져와 S3 마스터 파일과 Redshift 테이블에 추가하는 DAG",
