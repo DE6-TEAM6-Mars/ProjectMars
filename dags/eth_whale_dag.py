@@ -73,9 +73,7 @@ def crawl_and_save_csv(**kwargs):
             percentage = cols[4].text.strip()
 
             wallets.append({
-                "rank": rank,
                 "address": address,
-                "address_nametag": name_tag,
                 "eth_balance": eth_balance,
                 "percentage": percentage
             })
@@ -98,7 +96,7 @@ def crawl_and_save_csv(**kwargs):
 
             time.sleep(3)  # ✅ 봇 차단 방지용 sleep 증가
 
-        df = pd.DataFrame(all_wallets)
+        df = pd.DataFrame(all_wallets, columns=["address", "eth_balance", "percentage"])
         if df.empty:
             raise ValueError("[FAILURE] No wallet data was collected. Failing DAG.")  # ✅ 결과 비었을 때 DAG 실패 유도
 
@@ -143,9 +141,7 @@ def copy_to_redshift(**kwargs):
 
     create_sql = """
     CREATE TABLE IF NOT EXISTS raw_data.eth_top_holders (
-        rank INT,
         address VARCHAR,
-        address_nametag VARCHAR,
         eth_balance VARCHAR,
         percentage VARCHAR,
         inserted_at TIMESTAMP
