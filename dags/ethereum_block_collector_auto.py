@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
 from airflow.decorators import dag, task
 from airflow.operators.python import get_current_context
-from utils import collect_raw_transactions, upload_to_s3, load_partition_and_table
+from utils import collect_raw_transactions, upload_to_s3, load_partition_and_table, slack_callback
 import logging
 
 
@@ -15,6 +15,7 @@ import logging
         'owner': 'airflow',
         'retries': 1,
         'retry_delay': timedelta(minutes=5),
+        'on_failure_callback': slack_callback,
     },
     tags=['ethereum', 'block', 'collector']
 )

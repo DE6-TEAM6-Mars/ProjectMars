@@ -16,7 +16,38 @@ from airflow.providers.postgres.hooks.postgres import PostgresHook
 ETHERSCAN_API_KEY = Variable.get("ETHERSCAN_API_KEY")
 NODIT_API_KEYS = json.loads(Variable.get("NODIT_API_KEYS", default_var="[]"))
 KST = timezone(timedelta(hours=9))
+SLACK_WEBHOOK_URL = Variable.get("SLACK_WEBHOOK")
 
+def slack_callback(context):
+    """
+    Airflow Task 실패 시 호출될 공통 콜백 함수.
+    실패 정보를 담아 Slack으로 알림을 보냅니다.
+    """
+    dag_run = context.get('dag_run')
+    task_instance = context.get('task_instance')
+    dag_id = task_instance.dag_id
+    task_id = task_instance.task_id
+    execution_date = context.get('execution_date')
+    log_url = task_instance.log_url
+
+    message = f"""
+    :red_circle: *Airflow Task Failed*
+    *DAG:* `{dag_id}`
+    *Task:* `{task_id}`
+    *Execution Date:* `{execution_date}`
+    *Log URL:* <{log_url}|View Log>
+    """
+
+    try:
+        response = requests.post(
+            SLACK_WEBHOOK_URL,
+            headers={'Content-Type': 'application/json'},
+            data=json.dumps({'text': message})
+        )
+        response.raise_for_status()
+        print("Slack 알림 전송 성공")
+    except Exception as e:
+        print(f"Slack 알림 전송 실패: {e}")
 
 def find_block_by_timestamp(target_ts: int, closest: str = "before") -> Optional[int]:
     url = "https://api.etherscan.io/api"

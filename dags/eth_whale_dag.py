@@ -35,12 +35,12 @@ dag = DAG(
 def crawl_and_save_csv(**kwargs):
     BASE_URL = "https://etherscan.io/accounts"
     HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/115.0.0.0 Safari/537.36"
-    )
-}
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/115.0.0.0 Safari/537.36"
+        )
+    }
 
     def parse_wallets_from_page(html):
         soup = BeautifulSoup(html, "html.parser")
@@ -50,7 +50,16 @@ def crawl_and_save_csv(**kwargs):
 
         for row in rows:
             cols = row.find_all("td")
-            if len(cols) < 4:
+            if len(cols) < 5:
+                continue
+
+            # 1차 필터: img 태그가 존재 → 거래소 or 컨트랙트
+            if cols[2].find("img"):
+                continue
+
+            # 2차 필터: 네임태그가 존재 → 개인 주소 아님
+            name_tag = cols[2].text.strip()
+            if name_tag:
                 continue
 
             rank = cols[0].text.strip()
@@ -60,7 +69,6 @@ def crawl_and_save_csv(**kwargs):
             except Exception:
                 address = "N/A"
 
-            name_tag = cols[2].text.strip()
             eth_balance = cols[3].text.strip()
             percentage = cols[4].text.strip()
 
@@ -73,35 +81,44 @@ def crawl_and_save_csv(**kwargs):
             })
         return wallets
 
-    def crawl_top_eth_wallets(pages=10):
+    def crawl_top_eth_wallets(pages=100):
         all_wallets = []
         for page in range(1, pages + 1):
             url = f"{BASE_URL}/{page}?ps=100"
-            response = requests.get(url, headers=HEADERS)
-            if response.status_code != 200:
-                print(f"Failed to fetch page {page}")
+            try:
+                response = requests.get(url, headers=HEADERS, timeout=10)
+                if response.status_code != 200:
+                    print(f"[ERROR] Failed to fetch page {page} (Status code: {response.status_code})")
+                    continue
+                wallets = parse_wallets_from_page(response.text)
+                all_wallets.extend(wallets)
+            except requests.RequestException as e:
+                print(f"[ERROR] Exception while fetching page {page}: {e}")
                 continue
-            wallets = parse_wallets_from_page(response.text)
-            all_wallets.extend(wallets)
-            time.sleep(1.5)
-        return pd.DataFrame(all_wallets)
 
-    # 날짜 기반 경로 및 inserted_at 추가
+            time.sleep(3)  # ✅ 봇 차단 방지용 sleep 증가
+
+        df = pd.DataFrame(all_wallets)
+        if df.empty:
+            raise ValueError("[FAILURE] No wallet data was collected. Failing DAG.")  # ✅ 결과 비었을 때 DAG 실패 유도
+
+        return df
+
     run_date = kwargs['ds']  # yyyy-mm-dd
     local_dir = f"/tmp/eth_data/{run_date}"
     os.makedirs(local_dir, exist_ok=True)
 
-    df = crawl_top_eth_wallets(pages=10)
-    df["inserted_at"] = pd.to_datetime(run_date)  # 또는 datetime.utcnow()
-    df.to_csv(f"{local_dir}/top1000_holders_eth.csv", index=False)
+    df = crawl_top_eth_wallets(pages=100)
+    df["inserted_at"] = pd.to_datetime(run_date)
+    df.to_csv(f"{local_dir}/top10000_holders_eth.csv", index=False)
 
 # ─────────────────────────────────────────────
 # Step 2: S3 업로드
 # ─────────────────────────────────────────────
 def upload_to_s3(**kwargs):
     run_date = kwargs['ds']
-    file_path = f"/tmp/eth_data/{run_date}/top1000_holders_eth.csv"
-    s3_key = f"eth/whale/{run_date}/top1000_holders_eth.csv"
+    file_path = f"/tmp/eth_data/{run_date}/top10000_holders_eth.csv"
+    s3_key = f"eth/whale/{run_date}/top10000_holders_eth.csv"
 
     bucket_name = Variable.get("S3_BUCKET_NAME")
     s3_hook = S3Hook(aws_conn_id="S3Conn")
@@ -109,18 +126,20 @@ def upload_to_s3(**kwargs):
 
     kwargs['ti'].xcom_push(key='s3_key', value=s3_key)
 
+
 # ─────────────────────────────────────────────
 # Step 3: Redshift COPY
 # ─────────────────────────────────────────────
 def copy_to_redshift(**kwargs):
-    s3_key = kwargs['ti'].xcom_pull(key='s3_key', task_ids='upload_to_s3')
+    run_date = kwargs["ds"]
+    s3_key = f"eth/whale/{run_date}/top10000_holders_eth.csv"
     bucket = Variable.get("S3_BUCKET_NAME")
     region = "ap-northeast-2"
-    
+
     access_key = Variable.get("AWS_ACCESS_KEY_ID")
     secret_key = Variable.get("AWS_SECRET_ACCESS_KEY")
 
-    redshift = PostgresHook(postgres_conn_id="REDSHIFT_CONN_ID")
+    redshift = PostgresHook(postgres_conn_id="RedshiftConn")
 
     create_sql = """
     CREATE TABLE IF NOT EXISTS raw_data.eth_top_holders (
@@ -140,16 +159,16 @@ def copy_to_redshift(**kwargs):
     REGION '{region}'
     FORMAT AS CSV
     IGNOREHEADER 1
-    DELIMITER ',';
+    DELIMITER ','; 
     """
 
     with redshift.get_conn() as conn:
         with conn.cursor() as cursor:
             cursor.execute(create_sql)
             cursor.execute("TRUNCATE TABLE raw_data.eth_top_holders")
+            print(f"[INFO] Copying from s3://{bucket}/{s3_key} to Redshift table raw_data.eth_top_holders")
             cursor.execute(copy_sql)
         conn.commit()
-
 # ─────────────────────────────────────────────
 # DAG Task 연결
 # ─────────────────────────────────────────────
