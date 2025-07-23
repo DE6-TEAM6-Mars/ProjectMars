@@ -24,7 +24,7 @@ default_args = {
     "retries": 1,
 }
 dag = DAG(
-    dag_id="eth_whale_wallets_daily_to_redshift",
+    dag_id="eth_whale_wallets_daily_test_dag",
     default_args=default_args,
     schedule_interval="0 1 * * *",  # UTC 01:00 → KST 10:00
     catchup=False,
