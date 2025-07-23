@@ -1,4 +1,4 @@
-![image.png](attachment:f44d8284-2ff1-4871-81ea-6e3e57b1b81f:image.png)
+![image.png](./erd.png)
 
 ## RAW_DATA
 
