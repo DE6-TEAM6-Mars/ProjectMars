@@ -1,21 +1,3 @@
-"""
-Nodit Lossless Ethereum Block Downloader (Asyncio + Parquet + S3)
-===============================================================
-- 비동기 aiohttp + aiolimiter 로 Nodit 2 req/s 제한 극복
-- 블록당 페이지(cursor) 병렬 처리
-- 상태 파일로 중단 시 재개
-- Parquet + Snappy 압축 후 S3 업로드
-
-필수 환경변수 (.env)
---------------------
-NODEIT_API_KEYS="k1,k2,k3,..."
-S3_ACCESS_KEY="..."
-S3_SECRET_KEY="..."
-BUCKET_NAME="de6-team6-bucket"
-TARGET_PREFIX="eth/historical/"
-
-"""
-
 import os, json, time, asyncio, datetime, logging, math
 from typing import List, Dict, Optional, Sequence, Tuple, Any
 
