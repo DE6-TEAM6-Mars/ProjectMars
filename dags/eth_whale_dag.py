@@ -12,7 +12,8 @@ import time
 from bs4 import BeautifulSoup
 import os
 from datetime import datetime
-
+import undetected_chromedriver as uc
+from selenium.webdriver.chrome.options import Options
 
 # ─────────────────────────────────────────────
 # DAG 설정: 매일 오전 10시 (KST 기준)
@@ -33,90 +34,69 @@ dag = DAG(
 # Step 1: 크롤링 & CSV 저장 (inserted_at 포함)
 # ─────────────────────────────────────────────
 def crawl_and_save_csv(**kwargs):
-    BASE_URL = "https://etherscan.io/accounts"
-    HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/115.0.0.0 Safari/537.36"
-    ),
-    "Accept": (
-        "text/html,application/xhtml+xml,application/xml;"
-        "q=0.9,image/webp,*/*;q=0.8"
-    ),
-    "Accept-Encoding": "gzip, deflate, br",
-    "Accept-Language": "en-US,en;q=0.5",
-    "Referer": "https://etherscan.io/",
-    "Connection": "keep-alive",
-}
 
+    def crawl_eth_wallets_selenium(pages=100):
+        options = uc.ChromeOptions()
+        options.add_argument("--headless")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
 
+        driver = uc.Chrome(options=options)
 
-    def parse_wallets_from_page(html):
-        soup = BeautifulSoup(html, "html.parser")
-        table = soup.find("table")
-        rows = table.find_all("tr")[1:]
-        wallets = []
-
-        for row in rows:
-            cols = row.find_all("td")
-            if len(cols) < 5:
-                continue
-
-            # 1차 필터: img 태그가 존재 → 거래소 or 컨트랙트
-            if cols[2].find("img"):
-                continue
-
-            # 2차 필터: 네임태그가 존재 → 개인 주소 아님
-            name_tag = cols[2].text.strip()
-            if name_tag:
-                continue
-
-            rank = cols[0].text.strip()
-            try:
-                span = cols[1].find("span", attrs={"data-highlight-target": True})
-                address = span['data-highlight-target'].strip()
-            except Exception:
-                address = "N/A"
-
-            eth_balance = cols[3].text.strip()
-            percentage = cols[4].text.strip()
-
-            wallets.append({
-                "address": address,
-                "eth_balance": eth_balance,
-                "percentage": percentage
-            })
-        return wallets
-
-    def crawl_top_eth_wallets(pages=100):
         all_wallets = []
+
         for page in range(1, pages + 1):
-            url = f"{BASE_URL}/{page}?ps=100"
-            try:
-                response = requests.get(url, headers=HEADERS, timeout=10)
-                if response.status_code != 200:
-                    print(f"[ERROR] Failed to fetch page {page} (Status code: {response.status_code})")
-                    continue
-                wallets = parse_wallets_from_page(response.text)
-                all_wallets.extend(wallets)
-            except requests.RequestException as e:
-                print(f"[ERROR] Exception while fetching page {page}: {e}")
+            url = f"https://etherscan.io/accounts/{page}?ps=100"
+            driver.get(url)
+            time.sleep(3)
+
+            soup = BeautifulSoup(driver.page_source, "html.parser")
+            table = soup.find("table")
+            if not table:
                 continue
+            rows = table.find_all("tr")[1:]
 
-            time.sleep(3)  # ✅ 봇 차단 방지용 sleep 증가
+            for row in rows:
+                cols = row.find_all("td")
+                if len(cols) < 5:
+                    continue
 
-        df = pd.DataFrame(all_wallets, columns=["address", "eth_balance", "percentage"])
-        if df.empty:
-            raise ValueError("[FAILURE] No wallet data was collected. Failing DAG.")  # ✅ 결과 비었을 때 DAG 실패 유도
+                # 1차 필터: img 태그 존재 시 스킵 (거래소/컨트랙트 주소)
+                if cols[2].find("img"):
+                    continue
 
-        return df
+                # 2차 필터: 네임태그 존재 시 스킵 (개인 주소 아님)
+                if cols[2].text.strip():
+                    continue
 
+                try:
+                    address = cols[1].find("span", {"data-highlight-target": True})["data-highlight-target"].strip()
+                except Exception:
+                    address = "N/A"
+
+                eth_balance = cols[3].text.strip()
+                percentage = cols[4].text.strip()
+
+                all_wallets.append({
+                    "address": address,
+                    "eth_balance": eth_balance,
+                    "percentage": percentage
+                })
+
+        driver.quit()
+        return pd.DataFrame(all_wallets, columns=["address", "eth_balance", "percentage"])
+
+    # 실행 날짜 기반 저장 경로 생성
     run_date = kwargs['ds']  # yyyy-mm-dd
     local_dir = f"/tmp/eth_data/{run_date}"
     os.makedirs(local_dir, exist_ok=True)
 
-    df = crawl_top_eth_wallets(pages=100)
+    # Selenium 기반 크롤링 수행
+    df = crawl_eth_wallets_selenium(pages=100)
+
+    if df.empty:
+        raise ValueError("[FAILURE] No wallet data was collected. Failing DAG.")
+
     df["inserted_at"] = pd.to_datetime(run_date)
     df.to_csv(f"{local_dir}/top10000_holders_eth.csv", index=False)
 
