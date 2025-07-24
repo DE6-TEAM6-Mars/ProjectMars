@@ -41,7 +41,7 @@ def insert_transactions_to_redshift():
 
     # SQL 쿼리 실행
     query = f"""
-        INSERT INTO tb_eth_historical_transactions (
+        INSERT INTO raw_data.tb_eth_historical_transactions (
             transactionhash,
             blocknumber,
             transaction_from,
