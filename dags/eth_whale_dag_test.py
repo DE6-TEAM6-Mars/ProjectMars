@@ -19,7 +19,7 @@ default_args = {
     "retries": 1,
 }
 dag = DAG(
-    dag_id="eth_whale_redshift_only",
+    dag_id="eth_whale_redshift_only_v2",
     default_args=default_args,
     schedule_interval="0 1 * * *",  # UTC 01:00 → KST 10:00
     catchup=False,
