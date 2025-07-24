@@ -18,8 +18,8 @@ def build_dynamic_where_clause(start_date: datetime, end_date: datetime) -> str:
 
 
 # 날짜 범위 지정
-START_DATE = datetime(2015, 7, 1)
-END_DATE = datetime(2016, 7, 1)
+START_DATE = datetime(2025, 6, 1)
+END_DATE = datetime(2025, 6, 30)
 
 def insert_transactions_to_redshift():
     # Airflow Connection에서 Redshift 연결 정보 가져오기
@@ -41,16 +41,32 @@ def insert_transactions_to_redshift():
 
     # SQL 쿼리 실행
     query = f"""
-        INSERT INTO adhoc.test_historical_transactions
+        INSERT INTO tb_eth_historical_transactions (
+            transactionhash,
+            blocknumber,
+            transaction_from,
+            transaction_to,
+            value,
+            transaction_status,
+            key_year,
+            key_month,
+            key_day,
+            key_hour,
+            transaction_timestamp
+        )
         SELECT
             transactionhash,
             blocknumber,
-            "from",
-            "to",
+            "from" AS transaction_from,
+            "to" AS transaction_to,
             value,
-            status,
-            timestamp
-        FROM spectrum.tb_eth_transactions_parquet
+            status AS transaction_status,
+            year AS key_year,
+            month AS key_month,
+            day AS key_day,
+            hour AS key_hour,
+            timestamp AS transaction_timestamp
+        FROM spectrum.eth_transactions_parquet
         WHERE {where_clause};
     """
     cur.execute(query)
