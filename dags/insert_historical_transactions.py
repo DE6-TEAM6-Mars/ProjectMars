@@ -51,7 +51,6 @@ def insert_transactions_to_redshift():
             key_year,
             key_month,
             key_day,
-            key_hour,
             transaction_timestamp
         )
         SELECT
@@ -64,10 +63,14 @@ def insert_transactions_to_redshift():
             year AS key_year,
             month AS key_month,
             day AS key_day,
-            hour AS key_hour,
             timestamp AS transaction_timestamp
         FROM spectrum.eth_transactions_parquet
-        WHERE {where_clause};
+        WHERE {where_clause}
+        AND NOT EXISTS (
+            SELECT 1
+            FROM raw_data.tb_eth_historical_transactions
+            WHERE raw_data.tb_eth_historical_transactions.transactionhash = spectrum.eth_transactions_parquet.transactionhash
+        );
     """
     cur.execute(query)
     cur.close()
