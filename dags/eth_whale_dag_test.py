@@ -35,34 +35,26 @@ def copy_to_redshift(**kwargs):
     access_key = Variable.get("AWS_ACCESS_KEY_ID")
     secret_key = Variable.get("AWS_SECRET_ACCESS_KEY")
 
-    redshift = PostgresHook(postgres_conn_id="RedshiftConn")
-
-    create_sql = """
-    CREATE TABLE IF NOT EXISTS raw_data.eth_top_holders (
-        address VARCHAR,
-        eth_balance VARCHAR,
-        percentage VARCHAR,
-        inserted_at TIMESTAMP
-    );
-    """
-
     copy_sql = f"""
-    COPY raw_data.eth_top_holders
-    FROM 's3://{bucket}/{s3_key}'
-    CREDENTIALS 'aws_access_key_id={access_key};aws_secret_access_key={secret_key}'
-    REGION '{region}'
-    FORMAT AS CSV
-    IGNOREHEADER 1
-    DELIMITER ','; 
+        COPY raw_data.eth_top_holders
+        FROM 's3://{bucket}/{s3_key}'
+        CREDENTIALS 'aws_access_key_id={access_key};aws_secret_access_key={secret_key}'
+        REGION '{region}'
+        FORMAT AS CSV
+        IGNOREHEADER 1
+        DELIMITER ',';
     """
 
-    with redshift.get_conn() as conn:
+    redshift_hook = PostgresHook(postgres_conn_id="RedshiftConn")
+
+    with redshift_hook.get_conn() as conn:
         with conn.cursor() as cursor:
-            cursor.execute(create_sql)
+            print(f"[INFO] Truncating table raw_data.eth_top_holders")
             cursor.execute("TRUNCATE TABLE raw_data.eth_top_holders")
             print(f"[INFO] Copying from s3://{bucket}/{s3_key} to Redshift table raw_data.eth_top_holders")
             cursor.execute(copy_sql)
         conn.commit()
+
 # ─────────────────────────────────────────────
 # DAG Task 연결
 # ─────────────────────────────────────────────
