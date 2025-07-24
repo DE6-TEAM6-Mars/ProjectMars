@@ -12,6 +12,7 @@ import time
 from bs4 import BeautifulSoup
 import os
 from datetime import datetime
+import cloudscraper
 
 
 # ─────────────────────────────────────────────
@@ -38,9 +39,21 @@ def crawl_and_save_csv(**kwargs):
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/115.0.0.0 Safari/537.36"
-        )
+            "Chrome/123.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://etherscan.io/",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "same-origin",
+        "Sec-Fetch-User": "?1",
     }
+
+    scraper = cloudscraper.create_scraper()
 
     def parse_wallets_from_page(html):
         soup = BeautifulSoup(html, "html.parser")
@@ -73,9 +86,7 @@ def crawl_and_save_csv(**kwargs):
             percentage = cols[4].text.strip()
 
             wallets.append({
-                "rank": rank,
                 "address": address,
-                "address_nametag": name_tag,
                 "eth_balance": eth_balance,
                 "percentage": percentage
             })
@@ -86,19 +97,19 @@ def crawl_and_save_csv(**kwargs):
         for page in range(1, pages + 1):
             url = f"{BASE_URL}/{page}?ps=100"
             try:
-                response = requests.get(url, headers=HEADERS, timeout=10)
+                response = scraper.get(url, headers=HEADERS, timeout=10)
                 if response.status_code != 200:
                     print(f"[ERROR] Failed to fetch page {page} (Status code: {response.status_code})")
                     continue
                 wallets = parse_wallets_from_page(response.text)
                 all_wallets.extend(wallets)
-            except requests.RequestException as e:
+            except Exception as e:
                 print(f"[ERROR] Exception while fetching page {page}: {e}")
                 continue
 
             time.sleep(3)  # ✅ 봇 차단 방지용 sleep 증가
 
-        df = pd.DataFrame(all_wallets)
+        df = pd.DataFrame(all_wallets, columns=["address", "eth_balance", "percentage"])
         if df.empty:
             raise ValueError("[FAILURE] No wallet data was collected. Failing DAG.")  # ✅ 결과 비었을 때 DAG 실패 유도
 
@@ -143,9 +154,7 @@ def copy_to_redshift(**kwargs):
 
     create_sql = """
     CREATE TABLE IF NOT EXISTS raw_data.eth_top_holders (
-        rank INT,
         address VARCHAR,
-        address_nametag VARCHAR,
         eth_balance VARCHAR,
         percentage VARCHAR,
         inserted_at TIMESTAMP
