@@ -12,6 +12,7 @@ import time
 from bs4 import BeautifulSoup
 import os
 from datetime import datetime
+import cloudscraper
 
 
 # ─────────────────────────────────────────────
@@ -35,12 +36,22 @@ dag = DAG(
 def crawl_and_save_csv(**kwargs):
     BASE_URL = "https://etherscan.io/accounts"
     HEADERS = {
-        "User-Agent": (
+    "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
             "Chrome/115.0.0.0 Safari/537.36"
-        )
+        ),
+        "Accept": (
+            "text/html,application/xhtml+xml,application/xml;"
+            "q=0.9,image/webp,*/*;q=0.8"
+        ),
+        "Accept-Encoding": "gzip, deflate, br",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Referer": "https://etherscan.io/",
+        "Connection": "keep-alive",
     }
+
+    scraper = cloudscraper.create_scraper()
 
     def parse_wallets_from_page(html):
         soup = BeautifulSoup(html, "html.parser")
@@ -84,13 +95,13 @@ def crawl_and_save_csv(**kwargs):
         for page in range(1, pages + 1):
             url = f"{BASE_URL}/{page}?ps=100"
             try:
-                response = requests.get(url, headers=HEADERS, timeout=10)
+                response = scraper.get(url, headers=HEADERS, timeout=10)
                 if response.status_code != 200:
                     print(f"[ERROR] Failed to fetch page {page} (Status code: {response.status_code})")
                     continue
                 wallets = parse_wallets_from_page(response.text)
                 all_wallets.extend(wallets)
-            except requests.RequestException as e:
+            except Exception as e:
                 print(f"[ERROR] Exception while fetching page {page}: {e}")
                 continue
 
