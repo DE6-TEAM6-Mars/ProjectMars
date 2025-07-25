@@ -25,7 +25,6 @@ dag = DAG(
     catchup=False,
 )
 
-
 def copy_to_redshift(**kwargs):
     run_date = kwargs["ds"]
     s3_key = f"eth/whale/{run_date}/top10000_holders_eth.csv"
@@ -35,6 +34,8 @@ def copy_to_redshift(**kwargs):
     access_key = Variable.get("AWS_ACCESS_KEY_ID")
     secret_key = Variable.get("AWS_SECRET_ACCESS_KEY")
 
+    redshift = PostgresHook(postgres_conn_id="RedshiftConn")
+
     copy_sql = f"""
         COPY raw_data.eth_top_holders
         FROM 's3://{bucket}/{s3_key}'
@@ -42,19 +43,23 @@ def copy_to_redshift(**kwargs):
         REGION '{region}'
         FORMAT AS CSV
         IGNOREHEADER 1
-        DELIMITER ',';
+        DELIMITER ','; 
     """
 
-    redshift_hook = PostgresHook(postgres_conn_id="RedshiftConn")
+    # ✅ S3 파일 존재 여부 확인
+    s3 = S3Hook()
+    if not s3.check_for_key(s3_key, bucket_name=bucket):
+        raise FileNotFoundError(f"[ERROR] S3 파일이 존재하지 않습니다: s3://{bucket}/{s3_key}")
 
-    with redshift_hook.get_conn() as conn:
+
+    with redshift.get_conn() as conn:
         with conn.cursor() as cursor:
             print(f"[INFO] Truncating table raw_data.eth_top_holders")
             cursor.execute("TRUNCATE TABLE raw_data.eth_top_holders")
             print(f"[INFO] Copying from s3://{bucket}/{s3_key} to Redshift table raw_data.eth_top_holders")
             cursor.execute(copy_sql)
         conn.commit()
-
+        
 # ─────────────────────────────────────────────
 # DAG Task 연결
 # ─────────────────────────────────────────────
