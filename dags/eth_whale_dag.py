@@ -12,7 +12,8 @@ import time
 from bs4 import BeautifulSoup
 import os
 from datetime import datetime
-import cloudscraper
+import boto3
+from botocore.exceptions import ClientError
 
 
 # ─────────────────────────────────────────────
@@ -39,21 +40,17 @@ def crawl_and_save_csv(**kwargs):
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/123.0.0.0 Safari/537.36"
+            "Chrome/115.0.0.0 Safari/537.36"
         ),
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Accept-Encoding": "gzip, deflate, br",
+        "Accept": (
+            "text/html,application/xhtml+xml,application/xml;"
+            "q=0.9,image/webp,*/*;q=0.8"
+        ),
         "Accept-Language": "en-US,en;q=0.9",
         "Referer": "https://etherscan.io/",
         "Connection": "keep-alive",
-        "Upgrade-Insecure-Requests": "1",
-        "Sec-Fetch-Dest": "document",
-        "Sec-Fetch-Mode": "navigate",
-        "Sec-Fetch-Site": "same-origin",
-        "Sec-Fetch-User": "?1",
+        "DNT": "1"
     }
-
-    scraper = cloudscraper.create_scraper()
 
     def parse_wallets_from_page(html):
         soup = BeautifulSoup(html, "html.parser")
@@ -93,25 +90,29 @@ def crawl_and_save_csv(**kwargs):
         return wallets
 
     def crawl_top_eth_wallets(pages=100):
+        session = requests.Session()
         all_wallets = []
+
         for page in range(1, pages + 1):
             url = f"{BASE_URL}/{page}?ps=100"
             try:
-                response = scraper.get(url, headers=HEADERS, timeout=10)
+                response = session.get(url, headers=HEADERS, timeout=10)
                 if response.status_code != 200:
                     print(f"[ERROR] Failed to fetch page {page} (Status code: {response.status_code})")
                     continue
+
                 wallets = parse_wallets_from_page(response.text)
                 all_wallets.extend(wallets)
+
             except Exception as e:
                 print(f"[ERROR] Exception while fetching page {page}: {e}")
                 continue
 
-            time.sleep(3)  # ✅ 봇 차단 방지용 sleep 증가
+            time.sleep(3)
 
         df = pd.DataFrame(all_wallets, columns=["address", "eth_balance", "percentage"])
         if df.empty:
-            raise ValueError("[FAILURE] No wallet data was collected. Failing DAG.")  # ✅ 결과 비었을 때 DAG 실패 유도
+            raise ValueError("[FAILURE] No wallet data was collected. Failing DAG.")
 
         return df
 
@@ -131,10 +132,32 @@ def upload_to_s3(**kwargs):
     file_path = f"/tmp/eth_data/{run_date}/top10000_holders_eth.csv"
     s3_key = f"eth/whale/{run_date}/top10000_holders_eth.csv"
 
+    # 필수 환경 변수 가져오기
     bucket_name = Variable.get("S3_BUCKET_NAME")
-    s3_hook = S3Hook(aws_conn_id="S3Conn")
-    s3_hook.load_file(filename=file_path, key=s3_key, bucket_name=bucket_name, replace=True)
+    access_key = Variable.get("AWS_ACCESS_KEY_ID")
+    secret_key = Variable.get("AWS_SECRET_ACCESS_KEY")
 
+    # boto3 S3 클라이언트 생성
+    s3 = boto3.client(
+        "s3",
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
+        region_name="ap-northeast-2"
+    )
+
+    # 파일이 실제로 존재하는지 확인
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"[❌] 업로드할 파일이 존재하지 않습니다: {file_path}")
+
+    # 파일 업로드
+    try:
+        s3.upload_file(file_path, bucket_name, s3_key)
+        print(f"[✅] S3 업로드 성공: s3://{bucket_name}/{s3_key}")
+    except ClientError as e:
+        print(f"[❌] S3 업로드 실패: {e}")
+        raise
+
+    # XCom push (다음 태스크에서 s3_key 사용 가능)
     kwargs['ti'].xcom_push(key='s3_key', value=s3_key)
 
 
@@ -195,11 +218,12 @@ upload_task = PythonOperator(
     dag=dag,
 )
 
-copy_task = PythonOperator(
-    task_id="copy_to_redshift",
-    python_callable=copy_to_redshift,
-    provide_context=True,
-    dag=dag,
-)
 
-crawl_task >> upload_task >> copy_task
+#copy_task = PythonOperator(
+#    task_id="copy_to_redshift",
+#    python_callable=copy_to_redshift,
+#   provide_context=True,
+#    dag=dag,
+#)
+
+crawl_task >> upload_task 
