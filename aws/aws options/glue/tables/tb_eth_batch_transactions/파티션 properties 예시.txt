@@ -1,0 +1,28 @@
+{
+  "Values": [
+    "2025",
+    "07",
+    "01",
+    "19"
+  ],
+  "DatabaseName": "de6-team6-testdb",
+  "TableName": "tb_eth_batch_transactions",
+  "CreationTime": "2025-07-17T01:48:53.000Z",
+  "StorageDescriptor": {
+    "Columns": [],
+    "Location": "s3://de6-team6-bucket/eth/batch/year=2025/month=07/day=01/hour=19/",
+    "InputFormat": "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
+    "OutputFormat": "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
+    "Compressed": false,
+    "NumberOfBuckets": 0,
+    "SerdeInfo": {
+      "SerializationLibrary": "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
+      "Parameters": {
+        "serialization.format": "1"
+      }
+    },
+    "SortColumns": [],
+    "StoredAsSubDirectories": false
+  },
+  "CatalogId": "862327261051"
+}

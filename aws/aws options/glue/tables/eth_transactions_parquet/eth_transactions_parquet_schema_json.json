@@ -1,0 +1,109 @@
+[
+  {
+    "Name": "transactionhash",
+    "Type": "string"
+  },
+  {
+    "Name": "transactionindex",
+    "Type": "int"
+  },
+  {
+    "Name": "blockhash",
+    "Type": "string"
+  },
+  {
+    "Name": "blocknumber",
+    "Type": "bigint"
+  },
+  {
+    "Name": "from",
+    "Type": "string"
+  },
+  {
+    "Name": "to",
+    "Type": "string"
+  },
+  {
+    "Name": "value",
+    "Type": "string"
+  },
+  {
+    "Name": "input",
+    "Type": "string"
+  },
+  {
+    "Name": "nonce",
+    "Type": "int"
+  },
+  {
+    "Name": "gas",
+    "Type": "bigint"
+  },
+  {
+    "Name": "gasprice",
+    "Type": "bigint"
+  },
+  {
+    "Name": "maxfeepergas",
+    "Type": "bigint"
+  },
+  {
+    "Name": "maxpriorityfeepergas",
+    "Type": "bigint"
+  },
+  {
+    "Name": "gasused",
+    "Type": "bigint"
+  },
+  {
+    "Name": "cumulativegasused",
+    "Type": "bigint"
+  },
+  {
+    "Name": "effectgasprice",
+    "Type": "bigint"
+  },
+  {
+    "Name": "contractaddress",
+    "Type": "string"
+  },
+  {
+    "Name": "type",
+    "Type": "string"
+  },
+  {
+    "Name": "status",
+    "Type": "string"
+  },
+  {
+    "Name": "logsbloom",
+    "Type": "string"
+  },
+  {
+    "Name": "timestamp",
+    "Type": "timestamp"
+  },
+  {
+    "Name": "accesslist",
+    "Type": "array<struct<address:string,storageKeys:array<string>>>"
+  },
+  {
+    "Name": "logs",
+    "Type": "array<struct<contractAddress:string,transactionHash:string,transactionIndex:bigint,blockHash:string,blockNumber:bigint,data:string,logIndex:bigint,removed:boolean,topics:array<string>>>"
+  },
+  {
+    "Name": "year",
+    "Type": "string",
+    "PartitionKey": "Partition (0)"
+  },
+  {
+    "Name": "month",
+    "Type": "string",
+    "PartitionKey": "Partition (1)"
+  },
+  {
+    "Name": "day",
+    "Type": "string",
+    "PartitionKey": "Partition (2)"
+  }
+]

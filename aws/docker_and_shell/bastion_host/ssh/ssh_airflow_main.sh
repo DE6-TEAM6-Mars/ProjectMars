@@ -1,0 +1,1 @@
+ssh -i ~/.ssh/privateAccessKey.pem ec2-user@'10.0.143.17'

@@ -1,0 +1,1 @@
+ssh -i ~/.ssh/privateAccessKey.pem ubuntu@'10.0.129.246'

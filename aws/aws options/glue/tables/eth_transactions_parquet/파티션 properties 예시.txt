@@ -1,0 +1,39 @@
+{
+  "Values": [
+    "2025",
+    "6",
+    "24"
+  ],
+  "DatabaseName": "de6-team6-testdb",
+  "TableName": "eth_transactions_parquet",
+  "CreationTime": "2025-07-22T02:56:04.000Z",
+  "LastAccessTime": "2025-07-22T02:56:04.000Z",
+  "StorageDescriptor": {
+    "Columns": [],
+    "Location": "s3://de6-team6-bucket/output/eth_transactions_parquet/year=2025/month=6/day=24/",
+    "InputFormat": "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
+    "OutputFormat": "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
+    "Compressed": false,
+    "NumberOfBuckets": -1,
+    "SerdeInfo": {
+      "SerializationLibrary": "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
+      "Parameters": {
+        "serialization.format": "1"
+      }
+    },
+    "BucketColumns": [],
+    "SortColumns": [],
+    "Parameters": {
+      "sizeKey": "909711542",
+      "objectCount": "9",
+      "recordCount": "1404247",
+      "averageRecordSize": "2368",
+      "compressionType": "none",
+      "classification": "parquet",
+      "typeOfData": "file"
+    },
+    "StoredAsSubDirectories": false
+  },
+  "Parameters": {},
+  "CatalogId": "862327261051"
+}

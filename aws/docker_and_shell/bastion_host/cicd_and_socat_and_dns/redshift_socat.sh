@@ -1,0 +1,1 @@
+nohup socat -dd TCP-LISTEN:5439,reuseaddr,fork TCP:de6-team6-redshift-cluster-2.cvkht4jvd430.ap-northeast-2.redshift.amazonaws.com:5439 > /dev/null 2>&1 &

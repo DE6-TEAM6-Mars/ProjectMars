@@ -1,0 +1,46 @@
+de6-team6-ec2-glue-table-pollcy
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "glue:GetTable",
+                "glue:CreateTable",
+                "glue:UpdateTable",
+                "glue:DeleteTable",
+                "glue:GetPartition",
+                "glue:CreatePartition",
+                "glue:DeletePartition",
+                "glue:UpdatePartition",
+                "glue:GetPartitions",
+                "glue:BatchDeletePartition"
+            ],
+            "Resource": [
+                "arn:aws:glue:ap-northeast-2:862327261051:catalog",
+                "arn:aws:glue:ap-northeast-2:862327261051:database/de6-team6-testdb",
+                "arn:aws:glue:ap-northeast-2:862327261051:table/de6-team6-testdb/*"
+            ]
+        }
+    ]
+}
+
+de6-team6-s3-burket-access
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "VisualEditor0",
+            "Effect": "Allow",
+            "Action": [
+                "s3:PutObject",
+                "s3:GetObject",
+                "s3:ListBucket"
+            ],
+            "Resource": [
+                "arn:aws:s3:::de6-team6-bucket",
+                "arn:aws:s3:::de6-team6-bucket/*"
+            ]
+        }
+    ]
+}

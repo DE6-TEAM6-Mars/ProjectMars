@@ -1,0 +1,102 @@
+import sys
+from awsglue.transforms import *
+from awsglue.utils import getResolvedOptions
+from awsglue.context import GlueContext
+from awsglue.job import Job
+
+from pyspark.context import SparkContext
+from pyspark.sql.functions import col, year, month, dayofmonth, to_timestamp, when, size, lit
+from pyspark.sql.types import *
+
+## @params: [JOB_NAME]
+args = getResolvedOptions(sys.argv, ['JOB_NAME'])
+
+sc = SparkContext()
+glueContext = GlueContext(sc)
+spark = glueContext.spark_session
+job = Job(glueContext)
+job.init(args['JOB_NAME'], args)
+
+# 1.S3에서 파일 읽어 오기
+schema = StructType([
+    StructField("transactionHash", StringType(), True),
+    StructField("transactionIndex", StringType(), True),
+    StructField("blockHash", StringType(), True),
+    StructField("blockNumber", StringType(), True),
+    StructField("from", StringType(), True),
+    StructField("to", StringType(), True),
+    StructField("value", StringType(), True),
+    StructField("input", StringType(), True),
+    StructField("nonce", StringType(), True),
+    StructField("gas", StringType(), True),
+    StructField("gasPrice", StringType(), True),
+    StructField("maxFeePerGas", StringType(), True),
+    StructField("maxPriorityFeePerGas", StringType(), True),
+    StructField("gasUsed", StringType(), True),
+    StructField("cumulativeGasUsed", StringType(), True),
+    StructField("effectGasPrice", StringType(), True),
+    StructField("contractAddress", StringType(), True),
+    StructField("type", StringType(), True),
+    StructField("status", StringType(), True),
+    StructField("logsBloom", StringType(), True),
+    StructField("timestamp", StringType(), True),
+    StructField("accessList", ArrayType(StructType([
+        StructField("address", StringType(), True),
+        StructField("storageKeys", ArrayType(StringType()), True)
+    ])), True),
+    StructField("logs", ArrayType(StructType([
+        StructField("contractAddress", StringType(), True),
+        StructField("transactionHash", StringType(), True),
+        StructField("transactionIndex", LongType(), True),
+        StructField("blockHash", StringType(), True),
+        StructField("blockNumber", LongType(), True),
+        StructField("data", StringType(), True),
+        StructField("logIndex", LongType(), True),
+        StructField("removed", BooleanType(), True),
+        StructField("topics", ArrayType(StringType()), True),
+    ])), True),
+])
+
+mapped_df = spark.read.schema(schema).parquet("s3://de6-team6-bucket/eth/historical/")#.drop("accessList").drop("logs")
+
+#컬럼 타입 변환
+mapped_df = mapped_df.withColumn("timestamp", to_timestamp("timestamp",'yyyy-MM-dd HH:mm:ss')) \
+                     .withColumn("transactionIndex", col("transactionIndex").cast("int")) \
+                     .withColumn("blockNumber", col("blockNumber").cast("bigint")) \
+                     .withColumn("nonce", col("nonce").cast("int")) \
+                     .withColumn("gas", col("gas").cast("bigint")) \
+                     .withColumn("gasPrice", col("gasPrice").cast("bigint")) \
+                     .withColumn("gasUsed", col("gasUsed").cast("bigint")) \
+                     .withColumn("cumulativeGasUsed", col("cumulativeGasUsed").cast("bigint")) \
+
+#accessList가 []이면 null이 되도록 처리.
+#mapped_df = mapped_df.withColumn("accessList", when(size(col("accessList")) == 0, None).otherwise(col("accessList")))
+
+#버전에 따라 없을 수 있는 컬럼은 별도 변환
+if "maxFeePerGas" in mapped_df.columns:
+    mapped_df = mapped_df.withColumn("maxFeePerGas", col("maxFeePerGas").cast("bigint"))
+
+if "maxPriorityFeePerGas" in mapped_df.columns:
+    mapped_df = mapped_df.withColumn("maxPriorityFeePerGas", col("maxPriorityFeePerGas").cast("bigint"))
+
+if "effectGasPrice" in mapped_df.columns:
+    mapped_df = mapped_df.withColumn("effectGasPrice", col("effectGasPrice").cast("bigint"))
+
+
+#파티션 컬럼 추가.
+mapped_df = mapped_df.withColumn("year", year(col("timestamp"))) \
+                     .withColumn("month", month(col("timestamp"))) \
+                     .withColumn("day", dayofmonth(col("timestamp")))
+
+print("====================================printSchema")
+mapped_df.printSchema()
+print("====================================printSchema")
+
+#파티션된 테이블로 저장
+mapped_df.write \
+    .partitionBy("year", "month", "day") \
+    .mode("overwrite") \
+    .parquet("s3://de6-team6-bucket/output/eth_transactions_parquet/")
+    
+job.commit()
+

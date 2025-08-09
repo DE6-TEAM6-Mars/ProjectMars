@@ -1,0 +1,156 @@
+[
+  {
+    "Name": "transactionhash",
+    "Type": "string",
+    "Comment": ""
+  },
+  {
+    "Name": "transactionindex",
+    "Type": "string",
+    "Comment": ""
+  },
+  {
+    "Name": "blockhash",
+    "Type": "string",
+    "Comment": ""
+  },
+  {
+    "Name": "blocknumber",
+    "Type": "bigint",
+    "Comment": ""
+  },
+  {
+    "Name": "from",
+    "Type": "string",
+    "Comment": ""
+  },
+  {
+    "Name": "to",
+    "Type": "string",
+    "Comment": ""
+  },
+  {
+    "Name": "value",
+    "Type": "string",
+    "Comment": ""
+  },
+  {
+    "Name": "input",
+    "Type": "string",
+    "Comment": ""
+  },
+  {
+    "Name": "functionselector",
+    "Type": "string",
+    "Comment": ""
+  },
+  {
+    "Name": "nonce",
+    "Type": "string",
+    "Comment": ""
+  },
+  {
+    "Name": "gas",
+    "Type": "string",
+    "Comment": ""
+  },
+  {
+    "Name": "gasprice",
+    "Type": "string",
+    "Comment": ""
+  },
+  {
+    "Name": "maxfeepergas",
+    "Type": "string",
+    "Comment": ""
+  },
+  {
+    "Name": "maxpriorityfeepergas",
+    "Type": "string",
+    "Comment": ""
+  },
+  {
+    "Name": "gasused",
+    "Type": "string",
+    "Comment": ""
+  },
+  {
+    "Name": "cumulativegasused",
+    "Type": "string",
+    "Comment": ""
+  },
+  {
+    "Name": "effectgasprice",
+    "Type": "string",
+    "Comment": ""
+  },
+  {
+    "Name": "contractaddress",
+    "Type": "string",
+    "Comment": ""
+  },
+  {
+    "Name": "type",
+    "Type": "string",
+    "Comment": ""
+  },
+  {
+    "Name": "status",
+    "Type": "string",
+    "Comment": ""
+  },
+  {
+    "Name": "logsbloom",
+    "Type": "string",
+    "Comment": ""
+  },
+  {
+    "Name": "timestamp",
+    "Type": "string",
+    "Comment": ""
+  },
+  {
+    "Name": "decodedinput",
+    "Type": "string",
+    "Comment": ""
+  },
+  {
+    "Name": "accesslist",
+    "Type": "array<struct<address:string,storageKeys:array<string>>>",
+    "Comment": ""
+  },
+  {
+    "Name": "authorizationlist",
+    "Type": "array<struct<chainId:string,nonce:string,address:string,yParity:string,r:string,s:string>>",
+    "Comment": ""
+  },
+  {
+    "Name": "logs",
+    "Type": "array<struct<contractAddress:string,transactionHash:string,transactionIndex:bigint,blockHash:string,blockNumber:bigint,data:string,logIndex:bigint,removed:boolean,topics:array<string>,decodedLog:struct<name:string,eventFragment:string,signature:string,eventHash:string,args:array<struct<name:string,type:string,value:string>>>>>",
+    "Comment": ""
+  },
+  {
+    "Name": "year",
+    "Type": "string",
+    "Comment": "",
+    "PartitionKey": "Partition (0)"
+  },
+  {
+    "Name": "month",
+    "Type": "string",
+    "Comment": "",
+    "PartitionKey": "Partition (1)"
+  },
+  {
+    "Name": "day",
+    "Type": "string",
+    "Comment": "",
+    "PartitionKey": "Partition (2)"
+  },
+  {
+    "Name": "hour",
+    "Type": "string",
+    "Comment": "",
+    "PartitionKey": "Partition (3)"
+  }
+]
